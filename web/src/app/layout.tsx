@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { isTvdbConfigured } from "@/lib/tvdb";
 import { Footer } from "./_components/Footer";
 import { SiteHeader } from "./_components/SiteHeader";
 
@@ -28,7 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-dvh">
         <SiteHeader isOwner={isAdmin} />
         <main className="mx-auto w-full max-w-4xl px-4 py-6">{children}</main>
-        <Footer isOwner={isAdmin} />
+        <Footer showTvdb={isTvdbConfigured()} />
       </body>
     </html>
   );
