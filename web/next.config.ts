@@ -10,7 +10,11 @@ const nextConfig: NextConfig = {
     // serves the requested size (w342, w500, …), so we skip Next's optimizer (unoptimized) — that also means no
     // `sharp` dependency. A local poster-cache job is backlog (§10) — switching to it won't touch the schema.
     unoptimized: true,
-    remotePatterns: [{ protocol: "https", hostname: "image.tmdb.org", pathname: "/t/p/**" }],
+    remotePatterns: [
+      { protocol: "https", hostname: "image.tmdb.org", pathname: "/t/p/**" },
+      // TVDB fallback artwork (posters for titles TMDB can't resolve).
+      { protocol: "https", hostname: "artworks.thetvdb.com", pathname: "/**" },
+    ],
   },
 };
 

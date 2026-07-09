@@ -184,7 +184,7 @@ export class Importer {
     const complete = await this.hydrateSeasons(canonical.id, tmdbId, detail);
     const updated = await this.prisma.mediaItem.update({
       where: { id: canonical.id },
-      data: { needsDetails: !complete, lastRefreshedAt: new Date() },
+      data: { needsDetails: !complete, metadataSource: "tmdb", lastRefreshedAt: new Date() },
     });
     if (!complete)
       this.report.warnings.push(`"${exportTitle}" partially hydrated (some seasons failed) — will retry on re-run`);
@@ -197,6 +197,7 @@ export class Importer {
       mediaType: "tv",
       tvdbId, // the export's tvdbId is authoritative for the natural key (may differ from TMDB's external id)
       imdbId: detail.external_ids?.imdb_id ?? series.id.imdb ?? null,
+      metadataSource: "tmdb",
       lastRefreshedAt: new Date(),
       needsDetails: false,
     };
@@ -371,6 +372,7 @@ export class Importer {
       mediaType: "movie",
       tvdbId, // the export's tvdbId is authoritative for the natural key
       imdbId: detail.external_ids?.imdb_id ?? movie.id.imdb ?? null,
+      metadataSource: "tmdb",
       lastRefreshedAt: new Date(),
       needsDetails: false,
     };

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getPrisma } from "@/lib/db";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
 import { getSetting } from "@/lib/settings";
+import { isTvdbConfigured } from "@/lib/tvdb";
 import { BackupNowButton, RefreshNowButton } from "./_components/AdminButtons";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -18,10 +20,11 @@ export default async function AdminPage() {
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role !== "owner") redirect("/login");
 
-  const [refresh, backup, importReport] = await Promise.all([
+  const [refresh, backup, importReport, tvdbStubs] = await Promise.all([
     getSetting("refresh:lastRun"),
     getSetting("backup:lastRun"),
     getSetting("import:lastReport"),
+    getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
   ]);
 
   return (
@@ -36,7 +39,7 @@ export default async function AdminPage() {
           <RefreshNowButton />
           <p className="text-sm text-[var(--color-muted)]">
             {refresh
-              ? `Last: ${when(refresh.at)} (${refresh.trigger}) — ${refresh.tvRefreshed} shows, ${refresh.moviesRefreshed} movies, ${refresh.errors} errors, ${refresh.durationMs}ms`
+              ? `Last: ${when(refresh.at)} (${refresh.trigger}) — ${refresh.tvRefreshed} shows, ${refresh.moviesRefreshed} movies, ${refresh.tvdbResolved ?? 0} via TVDB, ${refresh.errors} errors, ${refresh.durationMs}ms`
               : "Never run. The nightly job runs automatically; this triggers it now."}
           </p>
         </div>
@@ -123,6 +126,16 @@ export default async function AdminPage() {
           <Link href="/admin/plex" className="text-[var(--color-accent)] hover:underline">
             Open Plex sync →
           </Link>
+        </p>
+      </Panel>
+
+      <Panel title="TVDB fallback">
+        <p className="text-sm text-[var(--color-muted)]">
+          {isTvdbConfigured()
+            ? tvdbStubs > 0
+              ? `${tvdbStubs} title${tvdbStubs === 1 ? "" : "s"} TMDB can't resolve — Refresh hydrates them from TVDB.`
+              : "All titles resolved. TVDB fills in any that TMDB can't (fan/web content)."
+            : "Not configured — set TVDB_API_KEY (+ TVDB_PIN for a user-supported key) to resolve titles TMDB can't find."}
         </p>
       </Panel>
 

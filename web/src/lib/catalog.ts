@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
 
+// Which external API a catalog row is hydrated from. Drives where external ids are written (tmdbId vs tvdbId)
+// and which client the refresh dispatches to. See MediaItem.metadataSource.
+export type MetadataSource = "tmdb" | "tvdb";
+
 // Shared TMDB → catalog upsert. CATALOG ROWS ONLY (MediaItem/Season/Episode) — it never touches user state, so
 // the importer, search-add, and the nightly refresh all reuse it without risk. Three call sites justify the
 // extraction (global rule: single source of logic). The importer keys MediaItem by the export's tvdbId; search
@@ -46,37 +50,35 @@ export function movieDetailToMediaData(detail: TmdbMovieDetail) {
   };
 }
 
-// Upsert one season and all its episodes. Episode tvdbId is intentionally NOT written here — TMDB doesn't
-// provide it; the importer backfills it from the export match.
+// Upsert one season and all its episodes. The external id (season.id / ep.id) is written to the column that
+// matches `source` — tmdbId for TMDB, tvdbId for TVDB — so ids are never conflated across providers. For a TMDB
+// season, episode tvdbId is intentionally left untouched (TMDB doesn't provide it; the importer backfills it
+// from the export match); for a TVDB season, tmdbId is left null the same way.
 export async function upsertCatalogSeason(
   prisma: PrismaClient,
   mediaItemId: string,
   seasonNumber: number,
   season: TmdbSeasonDetail,
   stub?: { name?: string | null; air_date?: string | null; poster_path?: string | null; id?: number | null },
+  source: MetadataSource = "tmdb",
 ): Promise<void> {
+  const seasonExtId = season.id ?? stub?.id ?? null;
+  const seasonIdField = source === "tvdb" ? { tvdbId: seasonExtId } : { tmdbId: seasonExtId };
+  const seasonFields = {
+    isSpecials: seasonNumber === 0,
+    title: season.name ?? stub?.name ?? null,
+    overview: season.overview ?? null,
+    releaseDate: season.air_date ?? stub?.air_date ?? null,
+    posterPath: season.poster_path ?? stub?.poster_path ?? null,
+    ...seasonIdField,
+  };
   const seasonRow = await prisma.season.upsert({
     where: { mediaItemId_seasonNumber: { mediaItemId, seasonNumber } },
-    create: {
-      mediaItemId,
-      seasonNumber,
-      isSpecials: seasonNumber === 0,
-      title: season.name ?? stub?.name ?? null,
-      overview: season.overview ?? null,
-      releaseDate: season.air_date ?? stub?.air_date ?? null,
-      posterPath: season.poster_path ?? stub?.poster_path ?? null,
-      tmdbId: season.id ?? stub?.id ?? null,
-    },
-    update: {
-      isSpecials: seasonNumber === 0,
-      title: season.name ?? stub?.name ?? null,
-      overview: season.overview ?? null,
-      releaseDate: season.air_date ?? stub?.air_date ?? null,
-      posterPath: season.poster_path ?? stub?.poster_path ?? null,
-      tmdbId: season.id ?? stub?.id ?? null,
-    },
+    create: { mediaItemId, seasonNumber, ...seasonFields },
+    update: seasonFields,
   });
   for (const ep of season.episodes) {
+    const epIdField = source === "tvdb" ? { tvdbId: ep.id } : { tmdbId: ep.id };
     const epData = {
       seasonId: seasonRow.id,
       isSpecial: ep.season_number === 0,
@@ -84,7 +86,7 @@ export async function upsertCatalogSeason(
       overview: ep.overview ?? null,
       releaseDate: ep.air_date ?? null,
       runtime: ep.runtime ?? null,
-      tmdbId: ep.id,
+      ...epIdField,
     };
     await prisma.episode.upsert({
       where: {
@@ -143,6 +145,7 @@ export async function hydrateShowByTmdbId(
     ...md,
     tvdbId: existing?.tvdbId ?? md.tvdbId,
     mediaType: "tv",
+    metadataSource: "tmdb", // assert source so it can't drift (and self-heal a row previously adopted by TVDB)
     lastRefreshedAt: new Date(),
     needsDetails: false,
   };
@@ -176,6 +179,7 @@ export async function hydrateMovieByTmdbId(
     ...md,
     tvdbId: existing?.tvdbId ?? md.tvdbId,
     mediaType: "movie",
+    metadataSource: "tmdb", // assert source so it can't drift (and self-heal a row previously adopted by TVDB)
     lastRefreshedAt: new Date(),
     needsDetails: false,
   };

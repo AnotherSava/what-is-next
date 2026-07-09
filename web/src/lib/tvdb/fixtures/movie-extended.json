@@ -1,0 +1,22 @@
+{
+  "status": "success",
+  "data": {
+    "id": 138435,
+    "name": "Harry Potter and the Deathly Weapons",
+    "slug": "harry-potter-and-the-deathly-weapons",
+    "image": "https://artworks.thetvdb.com/banners/v4/movie/138435/posters/1.jpg",
+    "year": "2010",
+    "runtime": 25,
+    "status": { "id": 5, "name": "Released" },
+    "genres": [{ "id": 10, "name": "Fantasy" }],
+    "first_release": { "country": "usa", "date": "2010-08-01", "detail": null },
+    "remoteIds": [{ "id": "tt1699999", "type": 2, "sourceName": "IMDB" }],
+    "translations": {
+      "nameTranslations": [{ "name": "Harry Potter and the Deathly Weapons", "language": "eng", "isPrimary": true }],
+      "overviewTranslations": [
+        { "language": "spa", "overview": "Una parodia de Harry Potter hecha por fans." },
+        { "language": "eng", "overview": "A fan-made Harry Potter parody film." }
+      ]
+    }
+  }
+}

@@ -9,6 +9,7 @@ A personal, self-hosted tracker for TV series and movies — what I've watched, 
 - **Lists** for manual curation.
 - **Plex** library sync: badges the shows/seasons you have in Plex, an "In Plex" filter, and a review-then-add flow that pulls Plex-only titles into tracking (with their Plex watch state).
 - Nightly TMDB metadata refresh + SQLite backups; a JSON export as the escape hatch.
+- **TVDB fallback** (optional): hydrates niche/fan titles TMDB can't resolve from TheTVDB, so import stubs get real posters and episodes.
 
 ## Stack
 
@@ -83,9 +84,12 @@ The SQLite database and nightly backups live on the `data` volume at `/data` (`D
 | `PLEX_URL`       | no       | `http://localhost:32400` | Plex server base URL                                                                             |
 | `PLEX_TOKEN`     | no       | —                        | Plex `X-Plex-Token`; the whole Plex feature is hidden when unset                                 |
 | `PLEX_LIBRARIES` | no       | all TV+movie             | comma-separated Plex library titles to sync (e.g. `TV Shows,Movies`)                             |
+| `TVDB_API_KEY`   | no       | —                        | TVDB v4 API key; enables the fallback that hydrates titles TMDB can't resolve                    |
+| `TVDB_PIN`       | no       | —                        | TVDB subscriber PIN — only for a "user-supported" key; omit for a licensed key                   |
 
 ## Ops
 
 - **Nightly job** (registered in `src/instrumentation.ts`): refreshes TMDB metadata for still-airing shows and future/undated movies, backs up the SQLite file to `/data/backups` (14-day retention), and — when Plex is configured — refreshes the Plex presence badges. Trigger the refresh manually — globally or per-show — from `/admin`.
 - **Plex** (when `PLEX_TOKEN` is set): run a sync and review/add Plex-only titles from `/admin/plex`. The nightly job only refreshes presence; adding titles to tracking is always a manual, reviewed action.
+- **TVDB fallback** (when `TVDB_API_KEY` is set): the refresh also hydrates catalog rows TMDB can't resolve (fan/web titles the import left as bare stubs) from TheTVDB, keyed by their TVDB id. `/admin` shows how many such titles remain.
 - **Backups** are consistent online SQLite snapshots; copy them off the volume periodically.

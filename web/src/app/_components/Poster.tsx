@@ -1,8 +1,8 @@
 import Image from "next/image";
-import { tmdbImageUrl } from "@/lib/tmdb";
+import { posterUrl } from "@/lib/images";
 
-// Poster/backdrop image, hotlinked from TMDB by path (brief §4). Falls back to a titled placeholder when the
-// catalog row has no image (e.g. an unresolved import stub). Images are `unoptimized` (see next.config).
+// Poster/backdrop image, hotlinked by path from TMDB or by full URL from TVDB (brief §4). Falls back to a titled
+// placeholder when the catalog row has no image (e.g. an unresolved import stub). Images are `unoptimized`.
 export function Poster({
   path,
   alt,
@@ -18,7 +18,7 @@ export function Poster({
   height?: number;
   className?: string;
 }) {
-  const url = tmdbImageUrl(path, size);
+  const url = posterUrl(path, size);
   const base = "rounded-lg bg-[var(--color-surface-2)] object-cover";
   if (!url) {
     return (

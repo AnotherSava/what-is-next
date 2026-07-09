@@ -11,12 +11,13 @@ import {
   type TmdbSeasonDetail,
   type TmdbTvDetail,
 } from "./schemas";
+import { buildUrl, fetchJsonWithRetry, type QueryParams } from "@/lib/http";
 import { RateLimiter } from "./throttle";
 
 // The ONE place that talks to TMDB (brief §3.2): every response zod-parsed, a global throttle, retry+backoff
 // on 429/5xx, and in-process de-dupe of concurrent identical GETs. Nothing else in the app imports `fetch`
 // for TMDB. Kept DB-free (image URL building lives in ./images.ts) so it's pure and unit-testable — fetch,
-// limiter, clock and sleep are all injectable.
+// limiter, clock and sleep are all injectable. Transport primitives (buildUrl/retry) are shared via @/lib/http.
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -40,8 +41,6 @@ export interface TmdbClientOptions {
   backoffBaseMs?: number;
   sleep?: (ms: number) => Promise<void>;
 }
-
-type QueryParams = Record<string, string | number | undefined>;
 
 export class TmdbClient {
   private readonly token: string;
@@ -89,57 +88,26 @@ export class TmdbClient {
 
   // ── core ───────────────────────────────────────────────────────────────
   private request<T>(path: string, params: QueryParams, schema: z.ZodType<T>): Promise<T> {
-    const url = this.buildUrl(path, params);
+    const url = buildUrl(this.baseUrl, path, params);
     const existing = this.inflight.get(url);
     if (existing) return existing as Promise<T>;
 
+    const init: RequestInit = { headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" } };
     const promise = this.limiter
-      .schedule(() => this.fetchWithRetry(url, path))
+      .schedule(() =>
+        fetchJsonWithRetry(url, init, {
+          fetchImpl: this.fetchImpl,
+          maxRetries: this.maxRetries,
+          backoffBaseMs: this.backoffBaseMs,
+          sleep: this.sleep,
+          label: "TMDB",
+          makeError: (message, status) => new TmdbError(message, status, path),
+        }),
+      )
       .then((json) => schema.parse(json))
       .finally(() => this.inflight.delete(url));
     this.inflight.set(url, promise);
     return promise;
-  }
-
-  private buildUrl(path: string, params: QueryParams): string {
-    const url = new URL(this.baseUrl + path);
-    for (const [k, v] of Object.entries(params)) if (v !== undefined) url.searchParams.set(k, String(v));
-    return url.toString();
-  }
-
-  private async fetchWithRetry(url: string, path: string): Promise<unknown> {
-    for (let attempt = 0; ; attempt++) {
-      let res: Response;
-      try {
-        res = await this.fetchImpl(url, {
-          headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" },
-        });
-      } catch (err) {
-        if (attempt >= this.maxRetries) throw new TmdbError(`Network error: ${String(err)}`, undefined, path);
-        await this.sleep(this.backoffMs(attempt));
-        continue;
-      }
-
-      if (res.ok) return res.json();
-
-      // 429 (rate limited) and 5xx are transient → retry with backoff (honouring Retry-After when present).
-      if (res.status === 429 || res.status >= 500) {
-        if (attempt >= this.maxRetries) {
-          throw new TmdbError(`TMDB ${res.status} after ${attempt} retries`, res.status, path);
-        }
-        const retryAfter = Number(res.headers.get("retry-after"));
-        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : this.backoffMs(attempt);
-        await this.sleep(waitMs);
-        continue;
-      }
-
-      // Other 4xx (e.g. 404 not found) are terminal — surfaced so callers can log unresolved items.
-      throw new TmdbError(`TMDB ${res.status}`, res.status, path);
-    }
-  }
-
-  private backoffMs(attempt: number): number {
-    return this.backoffBaseMs * 2 ** attempt;
   }
 }
 

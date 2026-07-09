@@ -15,6 +15,7 @@ const refreshLastRunSchema = z.object({
   trigger: z.enum(["cron", "manual"]),
   tvRefreshed: z.number().int(),
   moviesRefreshed: z.number().int(),
+  tvdbResolved: z.number().int().default(0), // default keeps pre-TVDB stored summaries parseable
   errors: z.number().int(),
   durationMs: z.number().int(),
 });

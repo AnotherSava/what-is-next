@@ -1,0 +1,44 @@
+{
+  "status": "success",
+  "data": {
+    "id": 420847,
+    "name": "Backrooms",
+    "slug": "backrooms",
+    "image": "https://artworks.thetvdb.com/banners/v4/series/420847/posters/1.jpg",
+    "overview": "Found-footage horror web series set in the Backrooms.",
+    "year": "2022",
+    "firstAired": "2022-01-07",
+    "lastAired": "2023-06-01",
+    "originalLanguage": "eng",
+    "averageRuntime": 8,
+    "status": { "id": 1, "name": "Continuing" },
+    "genres": [
+      { "id": 18, "name": "Horror" },
+      { "id": 20, "name": "Short" }
+    ],
+    "seasons": [
+      {
+        "id": 5001,
+        "number": 0,
+        "name": "Specials",
+        "image": "https://artworks.thetvdb.com/banners/v4/season/5001/posters/1.jpg",
+        "type": { "id": 1, "name": "Aired Order", "type": "official" }
+      },
+      {
+        "id": 9999,
+        "number": 1,
+        "name": "Absolute Season 1",
+        "image": "https://artworks.thetvdb.com/banners/v4/season/9999/posters/1.jpg",
+        "type": { "id": 2, "name": "Absolute Order", "type": "absolute" }
+      },
+      {
+        "id": 5002,
+        "number": 1,
+        "name": "Season 1",
+        "image": "https://artworks.thetvdb.com/banners/v4/season/5002/posters/1.jpg",
+        "type": { "id": 1, "name": "Aired Order", "type": "official" }
+      }
+    ],
+    "remoteIds": [{ "id": "tt15380122", "type": 2, "sourceName": "IMDB" }]
+  }
+}

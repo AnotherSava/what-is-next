@@ -63,8 +63,27 @@ describe("hydrateShowByTmdbId", () => {
     expect(id).not.toBeNull();
     const row = await prisma.mediaItem.findUnique({ where: { tmdbId_mediaType: { tmdbId: 500, mediaType: "tv" } } });
     expect(row?.tvdbId).toBe(777);
+    expect(row?.metadataSource).toBe("tmdb");
     expect(row?.needsDetails).toBe(false);
     expect(await prisma.episode.count()).toBe(2);
+  });
+
+  it("resets metadataSource to tmdb, self-healing a row previously adopted from TVDB", async () => {
+    // A row TMDB couldn't resolve at import can get adopted by the TVDB fallback (metadataSource "tvdb"); if
+    // TMDB later resolves it, re-hydration must reclaim it so it can't stay mis-tagged (and mis-dispatched).
+    await prisma.mediaItem.create({
+      data: {
+        mediaType: "tv",
+        tmdbId: 500,
+        tvdbId: 777,
+        title: "Adopted",
+        needsDetails: false,
+        metadataSource: "tvdb",
+      },
+    });
+    await hydrateShowByTmdbId(prisma, fakeTmdb(), 500);
+    const row = await prisma.mediaItem.findUnique({ where: { tmdbId_mediaType: { tmdbId: 500, mediaType: "tv" } } });
+    expect(row?.metadataSource).toBe("tmdb");
   });
 
   it("preserves an authoritative tvdbId on re-hydrate (does not clobber the import's value)", async () => {

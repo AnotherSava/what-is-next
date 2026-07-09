@@ -1,0 +1,4 @@
+{
+  "status": "success",
+  "data": { "token": "TEST_JWT_TOKEN" }
+}

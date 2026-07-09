@@ -51,6 +51,8 @@ model MediaItem {
 
   lastRefreshedAt DateTime?
   needsDetails    Boolean   @default(true) // imported stub not yet hydrated from TMDB
+  metadataSource  String    @default("tmdb") // "tmdb" | "tvdb" — which API hydrates this row. TVDB is the
+  //                                            fallback for titles TMDB can't resolve (fan/web content).
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,6 +82,7 @@ model Season {
   releaseDate  String?
   posterPath   String?
   tmdbId       Int?
+  tvdbId       Int? // set when the show is TVDB-sourced (metadataSource "tvdb"); tmdbId stays null then
 
   episodes Episode[]
 
