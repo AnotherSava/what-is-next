@@ -1,0 +1,4 @@
+# This is a private showcase shared by link, not for search engines (brief §9). The per-page noindex meta
+# reinforces this; remove both to make it indexable.
+User-agent: *
+Disallow: /

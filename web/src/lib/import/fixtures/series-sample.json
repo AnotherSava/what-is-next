@@ -1,0 +1,295 @@
+[
+  {
+    "uuid": "fc2e10fd-490d-4f4e-a18a-81b29dd54644",
+    "id": {
+      "tvdb": 327417,
+      "imdb": null
+    },
+    "created_at": "2023-08-16T03:28:43.774071Z",
+    "title": "Money Heist",
+    "status": "up_to_date",
+    "is_favorite": true,
+    "_noEpisodeData": false,
+    "seasons": [
+      {
+        "number": 0,
+        "is_specials": true,
+        "episodes": [
+          {
+            "id": {
+              "tvdb": 8894036,
+              "imdb": null
+            },
+            "number": 23,
+            "name": "Money Heist: The Phenomenon",
+            "special": true,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          }
+        ]
+      },
+      {
+        "number": 1,
+        "is_specials": false,
+        "episodes": [
+          {
+            "id": {
+              "tvdb": 6056377,
+              "imdb": null
+            },
+            "number": 1,
+            "name": "Do as Planned",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T03:34:50Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 6056378,
+              "imdb": null
+            },
+            "number": 2,
+            "name": "Lethal Negligence",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T03:34:50Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 6056379,
+              "imdb": null
+            },
+            "number": 3,
+            "name": "Misfire",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T03:34:50Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 6056380,
+              "imdb": null
+            },
+            "number": 4,
+            "name": "Trojan Horse",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T03:34:50Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "uuid": "fbdbc37a-a9f7-49ec-9f3f-b9289bdc4f9e",
+    "id": {
+      "tvdb": 461821,
+      "imdb": null
+    },
+    "created_at": "2026-06-03T14:57:03.616476Z",
+    "title": "Sold Out on You",
+    "status": "not_started_yet",
+    "is_favorite": false,
+    "_noEpisodeData": false,
+    "seasons": [
+      {
+        "number": 1,
+        "is_specials": false,
+        "episodes": [
+          {
+            "id": {
+              "tvdb": 11534358,
+              "imdb": null
+            },
+            "number": 1,
+            "name": "Episode 1",
+            "special": false,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11543090,
+              "imdb": null
+            },
+            "number": 2,
+            "name": "Episode 2",
+            "special": false,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11715453,
+              "imdb": null
+            },
+            "number": 3,
+            "name": "Episode 3",
+            "special": false,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11715454,
+              "imdb": null
+            },
+            "number": 4,
+            "name": "Episode 4",
+            "special": false,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "uuid": "7cf98c64-9ea8-450c-a73a-e4287b101b10",
+    "id": {
+      "tvdb": 398822,
+      "imdb": null
+    },
+    "created_at": "2023-08-16T04:27:50.436291Z",
+    "title": "Poker Face (2023)",
+    "status": "stopped",
+    "is_favorite": false,
+    "_noEpisodeData": false,
+    "seasons": [
+      {
+        "number": 0,
+        "is_specials": true,
+        "episodes": [
+          {
+            "id": {
+              "tvdb": 11171799,
+              "imdb": null
+            },
+            "number": 1,
+            "name": "“Two Truths & a Lie” with Natasha Lyonne, Rian Johnson & Benjamin Bratt",
+            "special": true,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11171800,
+              "imdb": null
+            },
+            "number": 2,
+            "name": "Natasha Lyonne interview on “The Tonight Show",
+            "special": true,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11171801,
+              "imdb": null
+            },
+            "number": 3,
+            "name": "Rian Johnson shares the gaming & movie inspirations behind “Poker Face”",
+            "special": true,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          },
+          {
+            "id": {
+              "tvdb": 11171802,
+              "imdb": null
+            },
+            "number": 4,
+            "name": "Show creator Rian Johnson breaks down his favorite scenes",
+            "special": true,
+            "is_watched": false,
+            "watched_at": null,
+            "rewatch_count": 0,
+            "watched_count": 0
+          }
+        ]
+      },
+      {
+        "number": 1,
+        "is_specials": false,
+        "episodes": [
+          {
+            "id": {
+              "tvdb": 9421213,
+              "imdb": null
+            },
+            "number": 1,
+            "name": "Dead Man's Hand",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T04:27:54Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 9421251,
+              "imdb": null
+            },
+            "number": 2,
+            "name": "The Night Shift",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T04:27:54Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 9421252,
+              "imdb": null
+            },
+            "number": 3,
+            "name": "The Stall",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T04:27:54Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          },
+          {
+            "id": {
+              "tvdb": 9421253,
+              "imdb": null
+            },
+            "number": 4,
+            "name": "Rest in Metal",
+            "special": false,
+            "is_watched": true,
+            "watched_at": "2023-08-16T04:27:54Z",
+            "rewatch_count": 0,
+            "watched_count": 1
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,188 @@
+import type { PrismaClient } from "@/generated/prisma/client";
+import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
+
+// Shared TMDB → catalog upsert. CATALOG ROWS ONLY (MediaItem/Season/Episode) — it never touches user state, so
+// the importer, search-add, and the nightly refresh all reuse it without risk. Three call sites justify the
+// extraction (global rule: single source of logic). The importer keys MediaItem by the export's tvdbId; search
+// and refresh key by tmdbId. The shared season/episode upsert (upsertCatalogSeason) is identical for all.
+
+// Catalog fields derived purely from a TMDB show detail (external ids included). Callers add mediaType and may
+// override tvdbId (the importer prefers the export's authoritative value).
+export function tvDetailToMediaData(detail: TmdbTvDetail) {
+  return {
+    tmdbId: detail.id,
+    tvdbId: detail.external_ids?.tvdb_id ?? null,
+    imdbId: detail.external_ids?.imdb_id ?? null,
+    title: detail.name,
+    originalTitle: detail.original_name ?? null,
+    overview: detail.overview ?? null,
+    releaseDate: detail.first_air_date ?? null,
+    status: detail.status ?? null,
+    runtime: detail.episode_run_time?.[0] ?? null,
+    posterPath: detail.poster_path ?? null,
+    backdropPath: detail.backdrop_path ?? null,
+    genres: detail.genres?.length ? JSON.stringify(detail.genres.map((g) => g.name)) : null,
+    tmdbRating: detail.vote_average ?? null,
+    numberOfSeasons: detail.number_of_seasons ?? null,
+    numberOfEpisodes: detail.number_of_episodes ?? null,
+  };
+}
+
+export function movieDetailToMediaData(detail: TmdbMovieDetail) {
+  return {
+    tmdbId: detail.id,
+    tvdbId: detail.external_ids?.tvdb_id ?? null,
+    imdbId: detail.external_ids?.imdb_id ?? null,
+    title: detail.title,
+    originalTitle: detail.original_title ?? null,
+    overview: detail.overview ?? null,
+    releaseDate: detail.release_date ?? null,
+    status: detail.status ?? null,
+    runtime: detail.runtime ?? null,
+    posterPath: detail.poster_path ?? null,
+    backdropPath: detail.backdrop_path ?? null,
+    genres: detail.genres?.length ? JSON.stringify(detail.genres.map((g) => g.name)) : null,
+    tmdbRating: detail.vote_average ?? null,
+  };
+}
+
+// Upsert one season and all its episodes. Episode tvdbId is intentionally NOT written here — TMDB doesn't
+// provide it; the importer backfills it from the export match.
+export async function upsertCatalogSeason(
+  prisma: PrismaClient,
+  mediaItemId: string,
+  seasonNumber: number,
+  season: TmdbSeasonDetail,
+  stub?: { name?: string | null; air_date?: string | null; poster_path?: string | null; id?: number | null },
+): Promise<void> {
+  const seasonRow = await prisma.season.upsert({
+    where: { mediaItemId_seasonNumber: { mediaItemId, seasonNumber } },
+    create: {
+      mediaItemId,
+      seasonNumber,
+      isSpecials: seasonNumber === 0,
+      title: season.name ?? stub?.name ?? null,
+      overview: season.overview ?? null,
+      releaseDate: season.air_date ?? stub?.air_date ?? null,
+      posterPath: season.poster_path ?? stub?.poster_path ?? null,
+      tmdbId: season.id ?? stub?.id ?? null,
+    },
+    update: {
+      isSpecials: seasonNumber === 0,
+      title: season.name ?? stub?.name ?? null,
+      overview: season.overview ?? null,
+      releaseDate: season.air_date ?? stub?.air_date ?? null,
+      posterPath: season.poster_path ?? stub?.poster_path ?? null,
+      tmdbId: season.id ?? stub?.id ?? null,
+    },
+  });
+  for (const ep of season.episodes) {
+    const epData = {
+      seasonId: seasonRow.id,
+      isSpecial: ep.season_number === 0,
+      title: ep.name ?? null,
+      overview: ep.overview ?? null,
+      releaseDate: ep.air_date ?? null,
+      runtime: ep.runtime ?? null,
+      tmdbId: ep.id,
+    };
+    await prisma.episode.upsert({
+      where: {
+        mediaItemId_seasonNumber_episodeNumber: {
+          mediaItemId,
+          seasonNumber: ep.season_number,
+          episodeNumber: ep.episode_number,
+        },
+      },
+      create: { mediaItemId, seasonNumber: ep.season_number, episodeNumber: ep.episode_number, ...epData },
+      update: epData,
+    });
+  }
+}
+
+// Fetch every season of a show and upsert them. Returns false if any season failed to fetch (so callers keep
+// needsDetails=true and retry later instead of silently, permanently missing episodes).
+export async function hydrateSeasonsFromDetail(
+  prisma: PrismaClient,
+  tmdb: TmdbClient,
+  mediaItemId: string,
+  detail: TmdbTvDetail,
+): Promise<boolean> {
+  let complete = true;
+  for (const stub of detail.seasons ?? []) {
+    try {
+      const season = await tmdb.getSeasonDetail(detail.id, stub.season_number);
+      await upsertCatalogSeason(prisma, mediaItemId, stub.season_number, season, stub);
+    } catch {
+      complete = false;
+    }
+  }
+  return complete;
+}
+
+// Hydrate a show keyed by tmdbId (search-added / refresh). Upserts the MediaItem + all seasons/episodes and
+// sets needsDetails based on full hydration. Returns the mediaItemId, or null if the detail fetch failed.
+export async function hydrateShowByTmdbId(
+  prisma: PrismaClient,
+  tmdb: TmdbClient,
+  tmdbId: number,
+): Promise<string | null> {
+  let detail: TmdbTvDetail;
+  try {
+    detail = await tmdb.getTvDetail(tmdbId);
+  } catch {
+    return null;
+  }
+  const existing = await prisma.mediaItem.findUnique({
+    where: { tmdbId_mediaType: { tmdbId, mediaType: "tv" } },
+    select: { tvdbId: true },
+  });
+  const md = tvDetailToMediaData(detail);
+  // Preserve an authoritative tvdbId (e.g. from the import); only adopt TMDB's external id when none is set.
+  const data = {
+    ...md,
+    tvdbId: existing?.tvdbId ?? md.tvdbId,
+    mediaType: "tv",
+    lastRefreshedAt: new Date(),
+    needsDetails: false,
+  };
+  const item = await prisma.mediaItem.upsert({
+    where: { tmdbId_mediaType: { tmdbId, mediaType: "tv" } },
+    create: data,
+    update: data,
+  });
+  const complete = await hydrateSeasonsFromDetail(prisma, tmdb, item.id, detail);
+  if (!complete) await prisma.mediaItem.update({ where: { id: item.id }, data: { needsDetails: true } });
+  return item.id;
+}
+
+export async function hydrateMovieByTmdbId(
+  prisma: PrismaClient,
+  tmdb: TmdbClient,
+  tmdbId: number,
+): Promise<string | null> {
+  let detail: TmdbMovieDetail;
+  try {
+    detail = await tmdb.getMovieDetail(tmdbId);
+  } catch {
+    return null;
+  }
+  const existing = await prisma.mediaItem.findUnique({
+    where: { tmdbId_mediaType: { tmdbId, mediaType: "movie" } },
+    select: { tvdbId: true },
+  });
+  const md = movieDetailToMediaData(detail);
+  const data = {
+    ...md,
+    tvdbId: existing?.tvdbId ?? md.tvdbId,
+    mediaType: "movie",
+    lastRefreshedAt: new Date(),
+    needsDetails: false,
+  };
+  const item = await prisma.mediaItem.upsert({
+    where: { tmdbId_mediaType: { tmdbId, mediaType: "movie" } },
+    create: data,
+    update: data,
+  });
+  return item.id;
+}

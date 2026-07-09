@@ -1,0 +1,71 @@
+import { getPrisma } from "@/lib/db";
+
+// Read-side data layer for /movies (brief §8.4). A movie is "watched" iff it has a SeenEvent (episodeId null)
+// — the append-only log is the source of truth — and its watch date is the latest such event. Everything else
+// is the watchlist (tracking "planned"). Explicit userId per §5a rule 1.
+
+export interface MovieSummary {
+  id: string;
+  title: string;
+  posterPath: string | null;
+  releaseDate: string | null;
+  tmdbId: number | null;
+  tracking: string;
+  isFavorite: boolean;
+  watched: boolean;
+  watchedAt: Date | null;
+}
+
+export interface MoviesView {
+  watched: MovieSummary[];
+  watchlist: MovieSummary[];
+}
+
+export async function getMovies(userId: string): Promise<MoviesView> {
+  const prisma = getPrisma();
+  const [states, seen] = await Promise.all([
+    prisma.userMediaState.findMany({
+      where: { userId, mediaItem: { is: { mediaType: "movie" } } },
+      include: { mediaItem: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.seenEvent.findMany({
+      where: { userId, episodeId: null, mediaItem: { is: { mediaType: "movie" } } },
+      select: { mediaItemId: true, watchedAt: true },
+    }),
+  ]);
+
+  // Latest watch date per movie (null "seen, date unknown" events still mark it watched).
+  const latestWatch = new Map<string, Date | null>();
+  const watchedSet = new Set<string>();
+  for (const e of seen) {
+    watchedSet.add(e.mediaItemId);
+    const prev = latestWatch.get(e.mediaItemId);
+    if (!latestWatch.has(e.mediaItemId) || (e.watchedAt && (!prev || e.watchedAt > prev))) {
+      latestWatch.set(e.mediaItemId, e.watchedAt ?? prev ?? null);
+    }
+  }
+
+  const watched: MovieSummary[] = [];
+  const watchlist: MovieSummary[] = [];
+  for (const st of states) {
+    const isWatched = watchedSet.has(st.mediaItemId);
+    const summary: MovieSummary = {
+      id: st.mediaItem.id,
+      title: st.mediaItem.title,
+      posterPath: st.mediaItem.posterPath,
+      releaseDate: st.mediaItem.releaseDate,
+      tmdbId: st.mediaItem.tmdbId,
+      tracking: st.tracking,
+      isFavorite: st.isFavorite,
+      watched: isWatched,
+      watchedAt: latestWatch.get(st.mediaItemId) ?? null,
+    };
+    if (isWatched) watched.push(summary);
+    else watchlist.push(summary);
+  }
+
+  // Watched: most recent first (undated sink to the end). Watchlist: keep updatedAt order.
+  watched.sort((a, b) => (b.watchedAt?.getTime() ?? 0) - (a.watchedAt?.getTime() ?? 0));
+  return { watched, watchlist };
+}

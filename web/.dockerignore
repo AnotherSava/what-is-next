@@ -1,0 +1,23 @@
+# Build context excludes. Reinstalled or rebuilt in the image, or never belongs in it.
+node_modules
+.next
+out
+build
+
+# Local dev database, backups, data volume, and generated client — the image builds/migrates its own.
+prisma/dev.db*
+prisma/backups
+data
+src/generated
+
+# Secrets and local env — production secrets arrive via compose env_file, never baked into the image.
+.env
+.env.*
+!.env.example
+
+# Logs, caches, editor/tool scratch.
+dev-server*.log
+*.tsbuildinfo
+coverage
+.DS_Store
+scripts/out

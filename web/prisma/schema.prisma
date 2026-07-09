@@ -1,0 +1,242 @@
+// Data model for "What's next". Lineage: MediaTracker (github.com/bonukai/MediaTracker),
+// adapted to Prisma + SQLite. Catalog (refreshable from TMDB) is fully separated from
+// user state (append-only history, never touched by refresh).
+//
+// Kept verbatim from IMPLEMENTATION_BRIEF §5 (reviewed and agreed). Any deviation from that
+// spec must be documented here.
+//
+// Deviation 1 (2026-07-08): MediaItem.tmdbId is scoped unique per mediaType (@@unique([tmdbId, mediaType]))
+// instead of globally @unique. TMDB numbers movies and TV in independent id spaces (same as TVDB — see the
+// tvdbId note below), so a movie and a show can legitimately share a numeric tmdbId; a global unique would
+// reject the second on import/add. This mirrors the existing tvdbId treatment and is the "real defect" the
+// brief authorises correcting.
+//
+// Deviation 2 (2026-07-09): User.role defaults to "member", not "owner". The brief's inline comment states the
+// intent — "future added users don't silently get admin rights" — but @default("owner") does the opposite: any
+// row created without an explicit role would be admin. The seed sets role="owner" explicitly, so this changes
+// nothing in v1 while making §5a rule 5 (admin ≠ merely logged-in) actually hold. Surfaced by adversarial review.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ── CATALOG ──────────────────────────────────────────────────────────────
+
+model MediaItem {
+  id        String @id @default(cuid())
+  mediaType String // "tv" | "movie"
+
+  tmdbId Int? // scoped unique per mediaType via @@unique below (see Deviation 1) — not globally @unique
+  tvdbId Int?
+  imdbId String?
+
+  title         String
+  originalTitle String?
+  overview      String?
+  releaseDate   String? // ISO date string (TMDB convention)
+  status        String? // TMDB airing status: "Returning Series" | "Ended" | "Canceled" | ...
+  runtime       Int?    // minutes
+  posterPath    String? // TMDB path; rendered via configured image base
+  backdropPath  String?
+  genres        String? // JSON string[] + zod (printlab convention)
+  tmdbRating    Float?
+
+  numberOfSeasons  Int? // denormalized for list views; recomputed on refresh
+  numberOfEpisodes Int?
+
+  lastRefreshedAt DateTime?
+  needsDetails    Boolean   @default(true) // imported stub not yet hydrated from TMDB
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seasons      Season[]
+  episodes     Episode[]
+  userState    UserMediaState[]
+  seen         SeenEvent[]
+  listItems    ListItem[]
+  ratings      Rating[]
+  plexPresence PlexPresence[]
+
+  @@unique([tvdbId, mediaType]) // TVDB numbers movies and series independently
+  @@unique([tmdbId, mediaType]) // TMDB likewise — see Deviation 1 at the top of this file
+  @@index([mediaType])
+}
+
+model Season {
+  id          String    @id @default(cuid())
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  seasonNumber Int
+  isSpecials   Boolean @default(false) // season 0
+  title        String?
+  overview     String?
+  releaseDate  String?
+  posterPath   String?
+  tmdbId       Int?
+
+  episodes Episode[]
+
+  @@unique([mediaItemId, seasonNumber])
+}
+
+model Episode {
+  id          String    @id @default(cuid())
+  mediaItemId String // denormalized show FK for cheap per-show queries
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  seasonId    String
+  season      Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  seasonNumber  Int // denormalized for "S02E05" rendering and sorting
+  episodeNumber Int
+  isSpecial     Boolean @default(false)
+  title         String?
+  overview      String?
+  releaseDate   String? // "has it aired?" is DERIVED (releaseDate <= today), never stored
+  runtime       Int?
+  tmdbId        Int?
+  tvdbId        Int? // kept from import — allows re-matching if TMDB mapping was wrong
+  imdbId        String?
+
+  seen      SeenEvent[]
+  listItems ListItem[]
+  ratings   Rating[]
+
+  @@unique([mediaItemId, seasonNumber, episodeNumber])
+  @@index([mediaItemId, releaseDate])
+}
+
+// ── USER STATE ───────────────────────────────────────────────────────────
+
+// Single-user today; every state row still carries userId (free now, saves a
+// migration if accounts ever happen). Seed exactly one User with role "owner".
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      String   @default("member") // "owner" | "member" — admin/refresh/import actions require "owner",
+  //                                        so future added users don't silently get admin rights (Deviation 2).
+  //                                        The seed sets the sole v1 owner's role explicitly.
+  createdAt DateTime @default(now())
+
+  states       UserMediaState[]
+  seen         SeenEvent[]
+  lists        List[]
+  ratings      Rating[]
+  plexPresence PlexPresence[]
+}
+
+model UserMediaState {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  tracking   String  @default("watching") // "planned" | "watching" | "stopped" | "finished" — user INTENT,
+  //                                          distinct from derived progress (aired vs seen)
+  isFavorite Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, mediaItemId])
+  @@index([userId, tracking])
+}
+
+// Append-only watch log. Movie watch → episodeId NULL; episode watch → set;
+// rewatch → another row. Booleans and counts are always derived from this.
+model SeenEvent {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodeId   String?
+  episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  watchedAt DateTime? // null = "seen, date unknown"
+  source    String    @default("app") // "app" | "tvtime-import" | "plex"
+
+  @@index([userId, mediaItemId])
+  @@index([episodeId])
+}
+
+model Rating {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodeId   String?
+  episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  rating    Float? // 1–10; nullable — TV Time only had reactions
+  liked     Boolean? // preserves TV Time love/like losslessly
+  review    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, mediaItemId, episodeId])
+}
+
+// Manual curation only. The watch-next queue is DERIVED, not a list.
+model List {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items ListItem[]
+
+  @@unique([userId, name])
+}
+
+model ListItem {
+  id          String    @id @default(cuid())
+  listId      String
+  list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodeId   String?
+  episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  position Int      @default(0)
+  addedAt  DateTime @default(now())
+
+  @@unique([listId, mediaItemId, episodeId])
+}
+
+// Which of the user's tracked catalog items are present in their Plex library (Plex integration). Per-user
+// (§5a rule 4 — Plex is the user's own library, not shared catalog state). seasonNumber null = a movie, or
+// show-level presence; rows with seasonNumber mark which TV seasons are present. A sync REPLACES the whole set
+// for the user (deleteMany + createMany), so there's no upsert/null-unique concern.
+model PlexPresence {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId  String
+  mediaItem    MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  seasonNumber Int? // null = movie / show-level; set = a specific TV season present in Plex
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, mediaItemId])
+  @@index([userId])
+}
+
+// Key-value store for app config + job bookkeeping (refresh/backup/import summaries, Plex sync state).
+// JSON-encoded values, typed access via src/lib/settings.ts (printlab pattern).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

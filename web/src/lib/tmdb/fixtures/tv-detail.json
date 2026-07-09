@@ -1,0 +1,44 @@
+{
+  "id": 71446,
+  "name": "Money Heist",
+  "original_name": "La casa de papel",
+  "overview": "To carry out the biggest heist in history, a mysterious man called The Professor recruits a band of eight robbers.",
+  "first_air_date": "2017-05-02",
+  "status": "Ended",
+  "in_production": false,
+  "poster_path": "/reEMJA1uzscCbkpeRJeTT2bjqUp.jpg",
+  "backdrop_path": "/gFZriCkpJYsApPZEF3jhxL4yLzG.jpg",
+  "vote_average": 8.2,
+  "episode_run_time": [70],
+  "number_of_seasons": 3,
+  "number_of_episodes": 41,
+  "genres": [
+    { "id": 80, "name": "Crime" },
+    { "id": 18, "name": "Drama" }
+  ],
+  "seasons": [
+    {
+      "id": 92802,
+      "season_number": 0,
+      "name": "Specials",
+      "overview": "",
+      "air_date": null,
+      "poster_path": null,
+      "episode_count": 5
+    },
+    {
+      "id": 81978,
+      "season_number": 1,
+      "name": "Part 1",
+      "overview": "",
+      "air_date": "2017-05-02",
+      "poster_path": "/gT8bnG92RQrTzUChQhLtx4pKuLW.jpg",
+      "episode_count": 13
+    }
+  ],
+  "external_ids": {
+    "imdb_id": "tt6468322",
+    "tvdb_id": 327417,
+    "wikidata_id": "Q30093396"
+  }
+}

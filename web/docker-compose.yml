@@ -1,0 +1,38 @@
+# Deploy for "What's next" (brief §9). One command — `docker compose up -d` — brings up:
+#   1. `migrate` (one-shot, builder image): applies migrations + seeds the owner, then exits.
+#   2. `app` (runtime image): starts once migrate succeeds; serves on :3000.
+# Both mount the same `data` volume at /data, where the SQLite DB and nightly backups live.
+#
+# Secrets come from a local `.env` (copy .env.example). DATABASE_URL is pinned to the volume path here.
+
+services:
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed"
+    environment:
+      DATABASE_URL: "file:/data/whats-next.db"
+    env_file: .env
+    volumes:
+      - data:/data
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "file:/data/whats-next.db"
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  data:

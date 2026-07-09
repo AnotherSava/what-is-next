@@ -1,0 +1,21 @@
+{
+  "movie_results": [
+    {
+      "id": 1184918,
+      "title": "The Wild Robot",
+      "original_title": "The Wild Robot",
+      "overview": "After a shipwreck, an intelligent robot called Roz is stranded on an uninhabited island.",
+      "release_date": "2024-09-12",
+      "poster_path": "/wTnV3PCVW5O92JMrFvvrRcV39RU.jpg",
+      "backdrop_path": "/417tYZ4XUyJrtyZXj7HpvWf1E8f.jpg",
+      "vote_average": 8.3,
+      "genre_ids": [16, 878, 10751],
+      "adult": false,
+      "popularity": 210.5
+    }
+  ],
+  "person_results": [],
+  "tv_results": [],
+  "tv_episode_results": [],
+  "tv_season_results": []
+}

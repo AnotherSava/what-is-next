@@ -1,0 +1,44 @@
+[
+  {
+    "id": {
+      "tvdb": 353646,
+      "imdb": "tt29623480"
+    },
+    "uuid": "fc6f2a04-6c9d-4616-a4ea-aede878f75f5",
+    "created_at": "2024-09-30T21:47:56Z",
+    "title": "The Wild Robot",
+    "year": 2024,
+    "watched_at": "2024-10-16T20:16:42Z",
+    "is_watched": true,
+    "is_favorite": false,
+    "rewatch_count": 0
+  },
+  {
+    "id": {
+      "tvdb": 940,
+      "imdb": "tt2140479"
+    },
+    "uuid": "f09062d7-cf7e-4121-a628-3698469cfa31",
+    "created_at": "2025-02-02T23:19:57Z",
+    "title": "The Accountant",
+    "year": 2016,
+    "watched_at": "2025-06-09T07:36:27Z",
+    "is_watched": true,
+    "is_favorite": true,
+    "rewatch_count": 0
+  },
+  {
+    "id": {
+      "tvdb": 138435,
+      "imdb": ""
+    },
+    "uuid": "674e91cc-cf34-4b54-9c0f-a94db4be565e",
+    "created_at": "2026-02-21T20:56:36Z",
+    "title": "Harry Potter and the Deathly Weapons",
+    "year": 2020,
+    "watched_at": "2026-03-27T15:51:50Z",
+    "is_watched": true,
+    "is_favorite": false,
+    "rewatch_count": 0
+  }
+]

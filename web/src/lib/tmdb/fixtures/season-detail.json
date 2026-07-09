@@ -1,0 +1,31 @@
+{
+  "_id": "5279b1f519c295731c04651e",
+  "id": 81978,
+  "season_number": 1,
+  "name": "Part 1",
+  "overview": "",
+  "air_date": "2017-05-02",
+  "poster_path": "/gT8bnG92RQrTzUChQhLtx4pKuLW.jpg",
+  "episodes": [
+    {
+      "id": 1331738,
+      "episode_number": 1,
+      "season_number": 1,
+      "name": "Efectuar lo acordado",
+      "overview": "A young woman named Tokyo recounts her recruitment into a heist.",
+      "air_date": "2017-05-02",
+      "runtime": 47,
+      "vote_average": 7.6
+    },
+    {
+      "id": 1341415,
+      "episode_number": 2,
+      "season_number": 1,
+      "name": "Imprudencias letales",
+      "overview": "The heist begins.",
+      "air_date": "2017-05-09",
+      "runtime": 42,
+      "still_path": "/xyz.jpg"
+    }
+  ]
+}

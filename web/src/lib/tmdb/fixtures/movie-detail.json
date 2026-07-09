@@ -1,0 +1,23 @@
+{
+  "id": 1184918,
+  "title": "The Wild Robot",
+  "original_title": "The Wild Robot",
+  "overview": "After a shipwreck, an intelligent robot called Roz is stranded on an uninhabited island.",
+  "release_date": "2024-09-12",
+  "status": "Released",
+  "runtime": 102,
+  "poster_path": "/wTnV3PCVW5O92JMrFvvrRcV39RU.jpg",
+  "backdrop_path": "/417tYZ4XUyJrtyZXj7HpvWf1E8f.jpg",
+  "vote_average": 8.3,
+  "budget": 78000000,
+  "genres": [
+    { "id": 16, "name": "Animation" },
+    { "id": 878, "name": "Science Fiction" },
+    { "id": 10751, "name": "Family" }
+  ],
+  "external_ids": {
+    "imdb_id": "tt29623480",
+    "tvdb_id": 353646,
+    "facebook_id": null
+  }
+}
