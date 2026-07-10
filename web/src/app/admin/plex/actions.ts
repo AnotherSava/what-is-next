@@ -9,6 +9,7 @@ import { getSetting } from "@/lib/settings";
 // list; adding hydrates the selected Plex-only titles into tracking. Both re-verify the owner session.
 
 function revalidate(): void {
+  revalidatePath("/admin");
   revalidatePath("/admin/plex");
   revalidatePath("/shows");
   revalidatePath("/movies");

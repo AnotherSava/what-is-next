@@ -4,13 +4,10 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
 import { backupNow } from "../actions";
+import { ACTION_BUTTON_CLASS } from "./buttonStyle";
 
 // Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
 // determinate bar; backup stays a plain server action. `lastRun` is the server-rendered summary shown when idle.
-
-// Shared so the two action buttons can't drift apart visually.
-const BUTTON_CLASS =
-  "rounded-md bg-[var(--color-accent-strong)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-accent)] disabled:opacity-50";
 
 type RefreshMessage =
   | ({ type: "progress" } & RefreshProgress)
@@ -62,7 +59,7 @@ export function RefreshNowButton({ lastRun }: { lastRun: ReactNode }) {
 
   return (
     <div className="space-y-2.5">
-      <button type="button" disabled={running} onClick={run} className={BUTTON_CLASS}>
+      <button type="button" disabled={running} onClick={run} className={ACTION_BUTTON_CLASS}>
         {running ? "Refreshing…" : "Refresh now"}
       </button>
       {running ? (
@@ -132,7 +129,7 @@ export function BackupNowButton() {
           setDone(true);
         })
       }
-      className={BUTTON_CLASS}
+      className={ACTION_BUTTON_CLASS}
     >
       {pending ? "Backing up…" : done ? "Done ✓ — run again" : "Back up now"}
     </button>

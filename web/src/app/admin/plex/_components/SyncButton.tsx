@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ACTION_BUTTON_CLASS } from "../../_components/buttonStyle";
 import { syncPlexNow } from "../actions";
 
 // Triggers a full Plex scan (presence + candidate refresh). useTransition keeps it responsive during the
@@ -18,7 +19,7 @@ export function SyncPlexButton() {
           setDone(true);
         })
       }
-      className="rounded-md bg-[#e5a00d] px-3 py-1.5 text-sm font-medium text-black hover:opacity-90 disabled:opacity-50"
+      className={ACTION_BUTTON_CLASS}
     >
       {pending ? "Syncing…" : done ? "Synced ✓ — sync again" : "Sync Plex now"}
     </button>
