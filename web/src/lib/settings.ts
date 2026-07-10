@@ -29,28 +29,6 @@ const backupLastRunSchema = z.object({
   error: z.string().nullable(),
 });
 
-// A compact summary of the last import run, persisted so the admin page can show it regardless of where the
-// CLI ran (brief §8.7). The full report + unresolved items still go to scripts/out/.
-const importSummarySchema = z.object({
-  at: z.string(),
-  dir: z.string(),
-  seriesResolved: z.number().int(),
-  seriesTotal: z.number().int(),
-  moviesResolved: z.number().int(),
-  moviesTotal: z.number().int(),
-  episodesMatched: z.number().int(),
-  episodesTotal: z.number().int(),
-  unmatchedWatched: z.number().int(),
-  seenEpisodes: z.number().int(),
-  seenMovies: z.number().int(),
-  favoriteSeries: z.number().int(),
-  favoriteMovies: z.number().int(),
-  lists: z.number().int(),
-  listItems: z.number().int(),
-  unresolved: z.array(z.string()),
-  warnings: z.array(z.string()),
-});
-
 // Plex sync bookkeeping (Plex integration): last run summary for the admin page.
 const plexLastSyncSchema = z.object({
   at: z.string(),
@@ -84,7 +62,6 @@ const plexCandidatesSchema = z.object({
 const SETTING_SCHEMAS = {
   "refresh:lastRun": refreshLastRunSchema,
   "backup:lastRun": backupLastRunSchema,
-  "import:lastReport": importSummarySchema,
   "plex:lastSync": plexLastSyncSchema,
   "plex:candidates": plexCandidatesSchema,
 } as const;

@@ -6,12 +6,11 @@ import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from
 export type MetadataSource = "tmdb" | "tvdb";
 
 // Shared TMDB → catalog upsert. CATALOG ROWS ONLY (MediaItem/Season/Episode) — it never touches user state, so
-// the importer, search-add, and the nightly refresh all reuse it without risk. Three call sites justify the
-// extraction (global rule: single source of logic). The importer keys MediaItem by the export's tvdbId; search
-// and refresh key by tmdbId. The shared season/episode upsert (upsertCatalogSeason) is identical for all.
+// search-add and the nightly refresh both reuse it without risk (global rule: single source of logic). Both key
+// MediaItem by tmdbId, and the shared season/episode upsert (upsertCatalogSeason) is identical for both.
 
 // Catalog fields derived purely from a TMDB show detail (external ids included). Callers add mediaType and may
-// override tvdbId (the importer prefers the export's authoritative value).
+// override tvdbId (an already-set authoritative tvdbId is preserved over TMDB's external id).
 export function tvDetailToMediaData(detail: TmdbTvDetail) {
   return {
     tmdbId: detail.id,
@@ -52,8 +51,8 @@ export function movieDetailToMediaData(detail: TmdbMovieDetail) {
 
 // Upsert one season and all its episodes. The external id (season.id / ep.id) is written to the column that
 // matches `source` — tmdbId for TMDB, tvdbId for TVDB — so ids are never conflated across providers. For a TMDB
-// season, episode tvdbId is intentionally left untouched (TMDB doesn't provide it; the importer backfills it
-// from the export match); for a TVDB season, tmdbId is left null the same way.
+// season, episode tvdbId is intentionally left untouched (TMDB doesn't provide episode tvdb ids); for a TVDB
+// season, tmdbId is left null the same way.
 export async function upsertCatalogSeason(
   prisma: PrismaClient,
   mediaItemId: string,

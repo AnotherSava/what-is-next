@@ -34,7 +34,8 @@ export async function addListItem(listId: string, formData: FormData): Promise<v
   if (!list) return;
   const max = await prisma.listItem.aggregate({ where: { listId }, _max: { position: true } });
   const position = (max._max.position ?? -1) + 1;
-  // ListItem's unique includes a nullable episodeId → find-then-create keeps add idempotent (see importer note).
+  // ListItem's unique includes a nullable episodeId, and SQLite treats NULLs as distinct, so upsert-by-key can't
+  // dedupe null-episode rows → find-then-create keeps add idempotent.
   const existing = await prisma.listItem.findFirst({ where: { listId, mediaItemId, episodeId: null } });
   if (!existing) await prisma.listItem.create({ data: { listId, mediaItemId, position } });
   revalidatePath(`/lists/${listId}`);

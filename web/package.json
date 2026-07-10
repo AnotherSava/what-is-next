@@ -16,7 +16,6 @@
     "db:migrate": "doppler run -- prisma migrate dev",
     "db:seed": "doppler run -- prisma db seed",
     "db:studio": "doppler run -- prisma studio",
-    "import": "doppler run -- tsx scripts/import.ts",
     "export": "doppler run -- tsx scripts/export.ts"
   },
   "dependencies": {
