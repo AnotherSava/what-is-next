@@ -21,56 +21,114 @@ export interface RefreshResult {
   durationMs: number;
 }
 
+// Live progress for the manual "Refresh now" stream (admin UI). Counts are items *processed* (success or error)
+// so the bar advances even when an item fails. The nightly cron passes no callback and never builds these.
+export interface RefreshProgress {
+  done: number; // items processed so far across all phases
+  total: number; // items that will be processed this run
+  tvDone: number;
+  tvTotal: number;
+  movieDone: number;
+  movieTotal: number;
+  tvdbDone: number;
+  tvdbTotal: number;
+  current: string | null; // title of the item currently being fetched, or null between/after items
+}
+
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-export async function refreshAll(trigger: "cron" | "manual", nowMs: number = Date.now()): Promise<RefreshResult> {
+// `onProgress`, when given (manual runs), is called once up front with the totals and then after every processed
+// item, so the admin UI can stream a determinate progress bar. The nightly cron omits it and behaves as before.
+export async function refreshAll(
+  trigger: "cron" | "manual",
+  nowMs: number = Date.now(),
+  onProgress?: (progress: RefreshProgress) => void,
+): Promise<RefreshResult> {
   const prisma = getPrisma();
   const tmdb = getTmdb();
   const today = todayISO();
+
+  // Build the work lists first so the exact total is known before any item runs (progress needs it) and the skip
+  // predicates live in one place instead of being duplicated by a separate counting pass.
+  const tvItems = await prisma.mediaItem.findMany({
+    where: { mediaType: "tv", tmdbId: { not: null } },
+    select: { tmdbId: true, status: true, lastRefreshedAt: true, title: true },
+  });
+  const tvWork = tvItems.filter((it) => {
+    const stale = !it.lastRefreshedAt || nowMs - it.lastRefreshedAt.getTime() > THIRTY_DAYS_MS;
+    return !(isEndedStatus(it.status) && !stale); // ended & still fresh → nothing changes, skip
+  });
+
+  const movieItems = await prisma.mediaItem.findMany({
+    where: { mediaType: "movie", tmdbId: { not: null } },
+    select: { tmdbId: true, releaseDate: true, title: true },
+  });
+  // A released movie's metadata is stable — only refresh unreleased/undated ones.
+  const movieWork = movieItems.filter((it) => !(it.releaseDate != null && it.releaseDate.slice(0, 10) <= today));
+
+  // TVDB fallback: rows TMDB can't resolve (tmdbId null, tvdbId set) — the import stubs and any titles already
+  // adopted from TVDB. Skipped entirely when TVDB isn't configured. Kept small (a handful of titles).
+  const tvdbWork = isTvdbConfigured()
+    ? await prisma.mediaItem.findMany({
+        where: { tmdbId: null, tvdbId: { not: null } },
+        select: { tvdbId: true, mediaType: true, title: true },
+      })
+    : [];
+
+  const total = tvWork.length + movieWork.length + tvdbWork.length;
   let tvRefreshed = 0;
   let moviesRefreshed = 0;
   let tvdbResolved = 0;
   let errors = 0;
+  let tvProcessed = 0;
+  let movieProcessed = 0;
+  let tvdbProcessed = 0;
+  let current: string | null = null; // title of the item in flight, surfaced live in the admin progress bar
+  const emit = () =>
+    onProgress?.({
+      done: tvProcessed + movieProcessed + tvdbProcessed,
+      total,
+      tvDone: tvProcessed,
+      tvTotal: tvWork.length,
+      movieDone: movieProcessed,
+      movieTotal: movieWork.length,
+      tvdbDone: tvdbProcessed,
+      tvdbTotal: tvdbWork.length,
+      current,
+    });
+  emit(); // initial snapshot so the client can size the bar before the first item completes
 
-  const tvItems = await prisma.mediaItem.findMany({
-    where: { mediaType: "tv", tmdbId: { not: null } },
-    select: { tmdbId: true, status: true, lastRefreshedAt: true },
-  });
-  for (const it of tvItems) {
-    const stale = !it.lastRefreshedAt || nowMs - it.lastRefreshedAt.getTime() > THIRTY_DAYS_MS;
-    if (isEndedStatus(it.status) && !stale) continue;
+  // Each loop emits *before* fetching, so the bar names the title now in flight; the counts stay "completed so far"
+  // and tick up as the next item begins.
+  for (const it of tvWork) {
+    current = it.title;
+    emit();
     try {
       if (await hydrateShowByTmdbId(prisma, tmdb, it.tmdbId!)) tvRefreshed++;
       else errors++;
     } catch {
       errors++;
     }
+    tvProcessed++;
   }
 
-  const movieItems = await prisma.mediaItem.findMany({
-    where: { mediaType: "movie", tmdbId: { not: null } },
-    select: { tmdbId: true, releaseDate: true },
-  });
-  for (const it of movieItems) {
-    const releasedInPast = it.releaseDate != null && it.releaseDate.slice(0, 10) <= today;
-    if (releasedInPast) continue; // a released movie's metadata is stable
+  for (const it of movieWork) {
+    current = it.title;
+    emit();
     try {
       if (await hydrateMovieByTmdbId(prisma, tmdb, it.tmdbId!)) moviesRefreshed++;
       else errors++;
     } catch {
       errors++;
     }
+    movieProcessed++;
   }
 
-  // TVDB fallback: hydrate rows TMDB can't resolve (tmdbId null, tvdbId set) — the import stubs and any titles
-  // already adopted from TVDB. Skipped entirely when TVDB isn't configured. Kept small (a handful of titles).
-  if (isTvdbConfigured()) {
+  if (tvdbWork.length > 0) {
     const tvdb = getTvdb();
-    const fallbackItems = await prisma.mediaItem.findMany({
-      where: { tmdbId: null, tvdbId: { not: null } },
-      select: { tvdbId: true, mediaType: true },
-    });
-    for (const it of fallbackItems) {
+    for (const it of tvdbWork) {
+      current = it.title;
+      emit();
       try {
         const id =
           it.mediaType === "tv"
@@ -81,8 +139,12 @@ export async function refreshAll(trigger: "cron" | "manual", nowMs: number = Dat
       } catch {
         errors++;
       }
+      tvdbProcessed++;
     }
   }
+
+  current = null;
+  emit(); // final frame: everything processed, nothing in flight (100%)
 
   const result: RefreshResult = { tvRefreshed, moviesRefreshed, tvdbResolved, errors, durationMs: Date.now() - nowMs };
   await setSetting("refresh:lastRun", { at: new Date(nowMs).toISOString(), trigger, ...result });

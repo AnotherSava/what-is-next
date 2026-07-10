@@ -1,70 +1,140 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { backupNow, refreshNow } from "../actions";
+import { useRouter } from "next/navigation";
+import { type ReactNode, useState, useTransition } from "react";
+import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
+import { backupNow } from "../actions";
 
-// Small owner-console action buttons. useTransition disables the button and shows progress while the (possibly
-// slow) refresh/backup runs; a one-line result is shown afterwards.
+// Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
+// determinate bar; backup stays a plain server action. `lastRun` is the server-rendered summary shown when idle.
 
-export function RefreshNowButton() {
-  const [pending, start] = useTransition();
-  const [done, setDone] = useState(false);
-  return (
-    <ActionButton
-      label="Refresh now"
-      pendingLabel="Refreshing…"
-      pending={pending}
-      done={done}
-      onClick={() =>
-        start(async () => {
-          await refreshNow();
-          setDone(true);
-        })
+// Shared so the two action buttons can't drift apart visually.
+const BUTTON_CLASS =
+  "rounded-md bg-[var(--color-accent-strong)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-accent)] disabled:opacity-50";
+
+type RefreshMessage =
+  | ({ type: "progress" } & RefreshProgress)
+  | { type: "done"; result: RefreshResult }
+  | { type: "error"; message: string };
+
+export function RefreshNowButton({ lastRun }: { lastRun: ReactNode }) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<RefreshProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setProgress(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/refresh", { method: "POST" });
+      if (!res.ok || !res.body) {
+        throw new Error(res.status === 403 ? "Not authorized." : `Refresh failed (${res.status}).`);
       }
-    />
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamError: string | null = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          const msg = JSON.parse(line) as RefreshMessage;
+          if (msg.type === "progress") setProgress(msg);
+          else if (msg.type === "error") streamError = msg.message;
+        }
+      }
+      if (streamError) setError(streamError);
+      else router.refresh(); // pull the updated "Last run" summary — one refresh, not a four-route revalidation
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Refresh failed.");
+    } finally {
+      setRunning(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <button type="button" disabled={running} onClick={run} className={BUTTON_CLASS}>
+        {running ? "Refreshing…" : "Refresh now"}
+      </button>
+      {running ? (
+        <ProgressBar progress={progress} />
+      ) : (
+        <div className="space-y-0.5 text-sm text-[var(--color-muted)]">{lastRun}</div>
+      )}
+      {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+    </div>
   );
+}
+
+function ProgressBar({ progress }: { progress: RefreshProgress | null }) {
+  const total = progress?.total ?? 0;
+  const done = progress?.done ?? 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="max-w-md space-y-1.5" role="status" aria-live="polite">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-surface-2)]">
+        <div
+          className="h-full rounded-full bg-[var(--color-accent)] transition-[width] duration-300 ease-out"
+          // Before the first item lands (total known, done 0) show a thin sliver; an empty bar reads as "stuck".
+          style={{ width: total === 0 ? "8%" : `${Math.max(pct, 2)}%` }}
+        />
+      </div>
+      <p className="truncate text-xs text-[var(--color-muted)]">
+        {total === 0 ? (
+          "Preparing…"
+        ) : (
+          <>
+            <span className="font-medium tabular-nums text-[var(--color-text)]">{pct}%</span> · {activePhase(progress!)}
+            {progress!.current && (
+              <>
+                {" · "}
+                <span className="text-[var(--color-text)]">{progress!.current}</span>
+              </>
+            )}
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// One phase at a time: the first phase still holding unprocessed items. Phases run shows → movies → TVDB in order,
+// so everything before the active one is done and everything after hasn't started — no need to show all three.
+function activePhase(p: RefreshProgress): string {
+  if (p.tvDone < p.tvTotal) return `Shows ${p.tvDone}/${p.tvTotal}`;
+  if (p.movieDone < p.movieTotal) return `Movies ${p.movieDone}/${p.movieTotal}`;
+  if (p.tvdbDone < p.tvdbTotal) return `TVDB ${p.tvdbDone}/${p.tvdbTotal}`;
+  // All processed (a brief final frame before the stream closes) — report the last phase that had work at 100%.
+  if (p.tvdbTotal > 0) return `TVDB ${p.tvdbTotal}/${p.tvdbTotal}`;
+  if (p.movieTotal > 0) return `Movies ${p.movieTotal}/${p.movieTotal}`;
+  return `Shows ${p.tvTotal}/${p.tvTotal}`;
 }
 
 export function BackupNowButton() {
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   return (
-    <ActionButton
-      label="Back up now"
-      pendingLabel="Backing up…"
-      pending={pending}
-      done={done}
+    <button
+      type="button"
+      disabled={pending}
       onClick={() =>
         start(async () => {
           await backupNow();
           setDone(true);
         })
       }
-    />
-  );
-}
-
-function ActionButton({
-  label,
-  pendingLabel,
-  pending,
-  done,
-  onClick,
-}: {
-  label: string;
-  pendingLabel: string;
-  pending: boolean;
-  done: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={onClick}
-      className="rounded-md bg-[var(--color-accent-strong)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-accent)] disabled:opacity-50"
+      className={BUTTON_CLASS}
     >
-      {pending ? pendingLabel : done ? "Done ✓ — run again" : label}
+      {pending ? "Backing up…" : done ? "Done ✓ — run again" : "Back up now"}
     </button>
   );
 }

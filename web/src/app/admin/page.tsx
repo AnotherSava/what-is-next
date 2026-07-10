@@ -15,15 +15,22 @@ function when(iso: string | undefined): string {
   return new Intl.DateTimeFormat("en-CA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
 
+function plural(n: number, noun: string): string {
+  return `${n} ${n === 1 ? noun : `${noun}s`}`;
+}
+
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // Owner console (brief §8.7). proxy.ts already requires a session to reach /admin; this re-checks role.
 export default async function AdminPage() {
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role !== "owner") redirect("/login");
 
-  const [refresh, backup, importReport, tvdbStubs] = await Promise.all([
+  const [refresh, backup, tvdbStubs] = await Promise.all([
     getSetting("refresh:lastRun"),
     getSetting("backup:lastRun"),
-    getSetting("import:lastReport"),
     getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
   ]);
 
@@ -35,87 +42,48 @@ export default async function AdminPage() {
       </div>
 
       <Panel title="Refresh">
-        <div className="flex items-center gap-3">
-          <RefreshNowButton />
-          <p className="text-sm text-[var(--color-muted)]">
-            {refresh
-              ? `Last: ${when(refresh.at)} (${refresh.trigger}) — ${refresh.tvRefreshed} shows, ${refresh.moviesRefreshed} movies, ${refresh.tvdbResolved ?? 0} via TVDB, ${refresh.errors} errors, ${refresh.durationMs}ms`
-              : "Never run. The nightly job runs automatically; this triggers it now."}
-          </p>
-        </div>
+        <RefreshNowButton
+          lastRun={
+            refresh ? (
+              <>
+                <p>
+                  Last run {when(refresh.at)} ({refresh.trigger}) · {plural(refresh.errors, "error")} ·{" "}
+                  {seconds(refresh.durationMs)}
+                </p>
+                <p>
+                  {plural(refresh.tvRefreshed, "show")} · {plural(refresh.moviesRefreshed, "movie")} ·{" "}
+                  {refresh.tvdbResolved ?? 0} via TVDB
+                </p>
+              </>
+            ) : (
+              <p>Never run. The nightly job runs automatically; this triggers it now.</p>
+            )
+          }
+        />
       </Panel>
 
       <Panel title="Backups">
-        <div className="flex items-center gap-3">
+        <div className="space-y-2.5">
           <BackupNowButton />
-          <p className="text-sm text-[var(--color-muted)]">
-            {backup
-              ? backup.ok
-                ? `Last: ${when(backup.at)} — ${backup.file} (pruned ${backup.prunedCount} old)`
-                : `Last attempt ${when(backup.at)} FAILED: ${backup.error}`
-              : "No backup yet. Snapshots are kept 14 days on the data volume."}
-          </p>
-        </div>
-      </Panel>
-
-      <Panel title="Import">
-        {importReport ? (
-          <div className="space-y-2 text-sm">
-            <p className="text-[var(--color-muted)]">
-              Last import {when(importReport.at)} from <span className="font-mono text-xs">{importReport.dir}</span>
-            </p>
-            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[var(--color-muted)] sm:grid-cols-3">
-              <li>
-                Series: {importReport.seriesResolved}/{importReport.seriesTotal}
-              </li>
-              <li>
-                Movies: {importReport.moviesResolved}/{importReport.moviesTotal}
-              </li>
-              <li>
-                Episodes: {importReport.episodesMatched}/{importReport.episodesTotal}
-              </li>
-              <li>
-                Seen (ep/movie): {importReport.seenEpisodes}/{importReport.seenMovies}
-              </li>
-              <li>
-                Favorites: {importReport.favoriteSeries}+{importReport.favoriteMovies}
-              </li>
-              <li>
-                Lists: {importReport.lists} ({importReport.listItems} items)
-              </li>
-            </ul>
-            {importReport.unmatchedWatched > 0 && (
-              <p className="text-[var(--color-behind)]">
-                {importReport.unmatchedWatched} watched episodes went unmatched.
-              </p>
-            )}
-            {importReport.unresolved.length > 0 && (
-              <details className="text-[var(--color-muted)]">
-                <summary className="cursor-pointer">Unresolved ({importReport.unresolved.length})</summary>
-                <ul className="mt-1 list-disc pl-5">
-                  {importReport.unresolved.map((u, i) => (
-                    <li key={i}>{u}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            {importReport.warnings.length > 0 && (
-              <details className="text-[var(--color-muted)]">
-                <summary className="cursor-pointer">Warnings ({importReport.warnings.length})</summary>
-                <ul className="mt-1 list-disc pl-5">
-                  {importReport.warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
-                  ))}
-                </ul>
-              </details>
+          <div className="space-y-0.5 text-sm text-[var(--color-muted)]">
+            {backup ? (
+              backup.ok ? (
+                <>
+                  <p>
+                    Last: {when(backup.at)} (pruned {backup.prunedCount} old)
+                  </p>
+                  <p className="truncate">{backup.file}</p>
+                </>
+              ) : (
+                <p>
+                  Last attempt {when(backup.at)} FAILED: {backup.error}
+                </p>
+              )
+            ) : (
+              <p>No backup yet. Snapshots are kept 14 days on the data volume.</p>
             )}
           </div>
-        ) : (
-          <p className="text-sm text-[var(--color-muted)]">
-            No import recorded. Run <span className="font-mono text-xs">npm run import -- &lt;export-dir&gt;</span> from
-            the CLI.
-          </p>
-        )}
+        </div>
       </Panel>
 
       <Panel title="Plex">
