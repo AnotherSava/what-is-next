@@ -15,8 +15,7 @@
     "test:watch": "vitest",
     "db:migrate": "doppler run -- prisma migrate dev",
     "db:seed": "doppler run -- prisma db seed",
-    "db:studio": "doppler run -- prisma studio",
-    "export": "doppler run -- tsx scripts/export.ts"
+    "db:studio": "doppler run -- prisma studio"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",
