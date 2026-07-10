@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { logout } from "@/app/_actions/auth";
 
-// Top navigation, shared by viewer and owner renders. Content destinations sit on the left; account/owner
-// affordances (Admin console, Sign in / Sign out) sit on the right. Owner-only destinations (Search adds
-// catalog rows; Admin runs refresh/import/backups) appear only when isOwner — but that's UX; the routes
+// Top navigation, shared by viewer and owner renders. Content destinations sit on the left; the owner's Admin
+// console + Sign in sit on the right (Sign out lives in the footer). Owner-only destinations (Search adds
+// catalog rows; Admin runs refresh/backups/Plex sync) appear only when isOwner — but that's UX; the routes
 // themselves are guarded server-side (proxy.ts for /admin, requireOwner() in each action).
 export function SiteHeader({ isOwner }: { isOwner: boolean }) {
   const links: { href: string; label: string }[] = [
@@ -30,16 +29,9 @@ export function SiteHeader({ isOwner }: { isOwner: boolean }) {
         </div>
         <div className="flex items-center gap-1">
           {isOwner ? (
-            <>
-              <Link href="/admin" className={itemClass}>
-                Admin
-              </Link>
-              <form action={logout}>
-                <button type="submit" className={itemClass}>
-                  Sign out
-                </button>
-              </form>
-            </>
+            <Link href="/admin" className={itemClass}>
+              Admin
+            </Link>
           ) : (
             <Link href="/login" className={itemClass}>
               Sign in
