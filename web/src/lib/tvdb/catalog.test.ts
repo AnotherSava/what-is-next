@@ -110,7 +110,7 @@ describe("hydrateShowByTvdbId", () => {
       data: { mediaType: "tv", tvdbId: 420847, title: "Backrooms", needsDetails: true },
     });
     await prisma.userMediaState.create({
-      data: { userId: user.id, mediaItemId: stub.id, tracking: "watching", isFavorite: true },
+      data: { userId: user.id, mediaItemId: stub.id, wantToWatch: true, isFavorite: true },
     });
 
     const id = await hydrateShowByTvdbId(prisma, fakeTvdb(), 420847);
@@ -119,7 +119,7 @@ describe("hydrateShowByTvdbId", () => {
     expect(refreshed.needsDetails).toBe(false);
     expect(refreshed.metadataSource).toBe("tvdb");
     const state = await prisma.userMediaState.findFirstOrThrow({ where: { mediaItemId: stub.id } });
-    expect(state.tracking).toBe("watching");
+    expect(state.wantToWatch).toBe(true);
     expect(state.isFavorite).toBe(true);
   });
 });

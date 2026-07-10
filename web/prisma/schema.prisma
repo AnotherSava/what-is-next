@@ -40,7 +40,7 @@ model MediaItem {
   overview      String?
   releaseDate   String? // ISO date string (TMDB convention)
   status        String? // TMDB airing status: "Returning Series" | "Ended" | "Canceled" | ...
-  runtime       Int?    // minutes
+  runtime       Int? // minutes
   posterPath    String? // TMDB path; rendered via configured image base
   backdropPath  String?
   genres        String? // JSON string[] + zod (printlab convention)
@@ -57,13 +57,14 @@ model MediaItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  seasons      Season[]
-  episodes     Episode[]
-  userState    UserMediaState[]
-  seen         SeenEvent[]
-  listItems    ListItem[]
-  ratings      Rating[]
-  plexPresence PlexPresence[]
+  seasons         Season[]
+  episodes        Episode[]
+  userState       UserMediaState[]
+  seen            SeenEvent[]
+  listItems       ListItem[]
+  ratings         Rating[]
+  plexPresence    PlexPresence[]
+  plexSuppression PlexWatchSuppression[]
 
   @@unique([tvdbId, mediaType]) // TVDB numbers movies and series independently
   @@unique([tmdbId, mediaType]) // TMDB likewise — see Deviation 1 at the top of this file
@@ -107,9 +108,10 @@ model Episode {
   tvdbId        Int? // kept from import — allows re-matching if TMDB mapping was wrong
   imdbId        String?
 
-  seen      SeenEvent[]
-  listItems ListItem[]
-  ratings   Rating[]
+  seen            SeenEvent[]
+  listItems       ListItem[]
+  ratings         Rating[]
+  plexSuppression PlexWatchSuppression[]
 
   @@unique([mediaItemId, seasonNumber, episodeNumber])
   @@index([mediaItemId, releaseDate])
@@ -127,11 +129,12 @@ model User {
   //                                        The seed sets the sole v1 owner's role explicitly.
   createdAt DateTime @default(now())
 
-  states       UserMediaState[]
-  seen         SeenEvent[]
-  lists        List[]
-  ratings      Rating[]
-  plexPresence PlexPresence[]
+  states          UserMediaState[]
+  seen            SeenEvent[]
+  lists           List[]
+  ratings         Rating[]
+  plexPresence    PlexPresence[]
+  plexSuppression PlexWatchSuppression[]
 }
 
 model UserMediaState {
@@ -141,15 +144,17 @@ model UserMediaState {
   mediaItemId String
   mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
 
-  tracking   String  @default("watching") // "planned" | "watching" | "stopped" | "finished" — user INTENT,
-  //                                          distinct from derived progress (aired vs seen)
-  isFavorite Boolean @default(false)
+  wantToWatch Boolean @default(false) // the ONLY stored intent bit: "on my list / want to watch". Every display
+  //                                     state (planned/behind/up-to-date/stopped/finished) is DERIVED from the
+  //                                     watch log + airing status — see progress.ts displayGroup. Auto-set true
+  //                                     when you add or start a title; false + nothing watched = off-list (hidden).
+  isFavorite  Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([userId, mediaItemId])
-  @@index([userId, tracking])
+  @@index([userId, wantToWatch])
 }
 
 // Append-only watch log. Movie watch → episodeId NULL; episode watch → set;
@@ -163,11 +168,13 @@ model SeenEvent {
   episodeId   String?
   episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  watchedAt DateTime? // null = "seen, date unknown"
+  watchedAt DateTime? // null = "seen, date unknown" — WHEN it was watched (from Plex/TV Time; may predate the fetch)
   source    String    @default("app") // "app" | "tvtime-import" | "plex"
+  createdAt DateTime  @default(now()) // WHEN the row was logged — i.e. import/fetch time. Drives the Plex watch feed.
 
   @@index([userId, mediaItemId])
   @@index([episodeId])
+  @@index([userId, createdAt]) // the "recently watched (from Plex)" feed orders by fetch time
 }
 
 model Rating {
@@ -234,6 +241,23 @@ model PlexPresence {
 
   @@index([userId, mediaItemId])
   @@index([userId])
+}
+
+// A user's explicit "not watched" override (Plex integration). Written when the user unmarks a watch in the app;
+// blocks the Plex sync from re-importing that same watch (applyWatched skips suppressed signals). Cleared when
+// the user marks it watched again. episodeId null = the movie itself; set = a specific episode.
+model PlexWatchSuppression {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodeId   String?
+  episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, mediaItemId, episodeId])
+  @@index([userId, mediaItemId])
 }
 
 // Key-value store for app config + job bookkeeping (refresh/backup/import summaries, Plex sync state).

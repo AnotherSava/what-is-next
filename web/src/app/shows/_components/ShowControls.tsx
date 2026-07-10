@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { refreshShow } from "@/app/admin/actions";
-import { setTracking, toggleFavorite } from "../actions";
+import { setWantToWatch, toggleFavorite } from "../actions";
 
 export function RefreshShowButton({ showId }: { showId: string }) {
   const [pending, start] = useTransition();
@@ -41,27 +41,38 @@ export function FavoriteStar({ showId, isFavorite }: { showId: string; isFavorit
   );
 }
 
-const TRACKING_OPTIONS = [
-  { value: "watching", label: "Watching" },
-  { value: "planned", label: "Planned" },
-  { value: "stopped", label: "Stopped" },
-  { value: "finished", label: "Finished" },
-];
-
-export function TrackingSelect({ showId, tracking }: { showId: string; tracking: string }) {
+// "On my list" toggle — the one stored intent bit. Off + nothing watched hides the show; off + already watched
+// marks it Stopped; on surfaces it as Planned / Behind / Up to date (all derived). `started` (any episode watched)
+// only tunes the labels.
+export function WantToWatchToggle({
+  showId,
+  wantToWatch,
+  started,
+}: {
+  showId: string;
+  wantToWatch: boolean;
+  started: boolean;
+}) {
   const [pending, start] = useTransition();
+  const title = wantToWatch
+    ? started
+      ? "Remove from your list (marks it Stopped)"
+      : "Remove from your list"
+    : "Add to your list";
   return (
-    <select
-      value={tracking}
+    <button
+      type="button"
       disabled={pending}
-      onChange={(e) => start(() => setTracking(showId, e.target.value))}
-      className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
+      aria-pressed={wantToWatch}
+      title={title}
+      onClick={() => start(() => setWantToWatch(showId, !wantToWatch))}
+      className={`rounded-md border px-2.5 py-1 text-sm transition-colors disabled:opacity-50 ${
+        wantToWatch
+          ? "border-transparent bg-[var(--color-accent-strong)] text-white hover:bg-[var(--color-accent)]"
+          : "border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
+      }`}
     >
-      {TRACKING_OPTIONS.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      {wantToWatch ? "✓ On my list" : started ? "Resume" : "Add to list"}
+    </button>
   );
 }

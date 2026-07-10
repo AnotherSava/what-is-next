@@ -27,7 +27,7 @@ export async function addTitle(input: {
   });
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: item.id } },
-    create: { userId: owner.id, mediaItemId: item.id, tracking: "planned" },
+    create: { userId: owner.id, mediaItemId: item.id, wantToWatch: true },
     update: {}, // keep an existing intent if the show was already tracked
   });
 

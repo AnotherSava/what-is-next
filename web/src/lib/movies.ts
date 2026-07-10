@@ -1,8 +1,9 @@
 import { getPrisma } from "@/lib/db";
 
 // Read-side data layer for /movies (brief §8.4). A movie is "watched" iff it has a SeenEvent (episodeId null)
-// — the append-only log is the source of truth — and its watch date is the latest such event. Everything else
-// is the watchlist (tracking "planned"). Explicit userId per §5a rule 1.
+// — the append-only log is the source of truth — and its watch date is the latest such event. An unwatched movie
+// shows on the watchlist only if it's wanted (wantToWatch); wantToWatch=false + unwatched = off-list (hidden).
+// Explicit userId per §5a rule 1.
 
 export interface MovieSummary {
   id: string;
@@ -10,7 +11,6 @@ export interface MovieSummary {
   posterPath: string | null;
   releaseDate: string | null;
   tmdbId: number | null;
-  tracking: string;
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null;
@@ -50,13 +50,13 @@ export async function getMovies(userId: string): Promise<MoviesView> {
   const watchlist: MovieSummary[] = [];
   for (const st of states) {
     const isWatched = watchedSet.has(st.mediaItemId);
+    if (!isWatched && !st.wantToWatch) continue; // off-list — not wanted and not watched
     const summary: MovieSummary = {
       id: st.mediaItem.id,
       title: st.mediaItem.title,
       posterPath: st.mediaItem.posterPath,
       releaseDate: st.mediaItem.releaseDate,
       tmdbId: st.mediaItem.tmdbId,
-      tracking: st.tracking,
       isFavorite: st.isFavorite,
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,

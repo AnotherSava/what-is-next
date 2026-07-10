@@ -4,6 +4,7 @@ import { Poster } from "@/app/_components/Poster";
 import { todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { isManualWatchedEnabled } from "@/lib/settings";
 import { MarkWatchedControl, MovieFavoriteStar, UnmarkWatchedButton } from "./_components/MovieControls";
 
 export const metadata: Metadata = { title: "Movies" };
@@ -23,7 +24,11 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
   const active: Tab = tab === "watchlist" ? "watchlist" : "watched";
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const { watched, watchlist } = await getMovies(displayedUser.id);
+  const [{ watched, watchlist }, manualWatched] = await Promise.all([
+    getMovies(displayedUser.id),
+    isManualWatchedEnabled(),
+  ]);
+  const canMarkWatched = canEdit && manualWatched; // manual mark/unmark hidden unless the owner enabled it
   const today = todayISO();
   const list = active === "watched" ? watched : watchlist;
 
@@ -43,7 +48,14 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
       ) : (
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {list.map((m) => (
-            <MovieCard key={m.id} movie={m} tab={active} canEdit={canEdit} today={today} />
+            <MovieCard
+              key={m.id}
+              movie={m}
+              tab={active}
+              canEdit={canEdit}
+              canMarkWatched={canMarkWatched}
+              today={today}
+            />
           ))}
         </ul>
       )}
@@ -67,7 +79,19 @@ function TabLink({ tab, active, count, label }: { tab: Tab; active: Tab; count: 
   );
 }
 
-function MovieCard({ movie, tab, canEdit, today }: { movie: MovieSummary; tab: Tab; canEdit: boolean; today: string }) {
+function MovieCard({
+  movie,
+  tab,
+  canEdit,
+  canMarkWatched,
+  today,
+}: {
+  movie: MovieSummary;
+  tab: Tab;
+  canEdit: boolean;
+  canMarkWatched: boolean;
+  today: string;
+}) {
   const year = yearOf(movie.releaseDate);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
@@ -83,7 +107,7 @@ function MovieCard({ movie, tab, canEdit, today }: { movie: MovieSummary; tab: T
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            {canEdit &&
+            {canMarkWatched &&
               (tab === "watched" ? (
                 <UnmarkWatchedButton movieId={movie.id} />
               ) : (

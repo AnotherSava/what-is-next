@@ -35,7 +35,7 @@ export async function register(): Promise<void> {
           const owner = await getOwner();
           const p = await syncPlexPresence(owner.id, "cron");
           console.log(
-            `[nightly] plex: ${p.matchedShows} shows, ${p.matchedMovies} movies, ${p.presenceSeasons} seasons marked`,
+            `[nightly] plex: ${p.matchedShows} shows, ${p.matchedMovies} movies, ${p.presenceSeasons} seasons marked, ${p.importedWatches} watches imported`,
           );
         }
       } catch (e) {

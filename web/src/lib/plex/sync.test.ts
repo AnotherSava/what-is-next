@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 import type { TmdbClient } from "@/lib/tmdb";
 import type { PlexClient } from "./client";
-import { addPlexItems, applyPresence, scanPlex } from "./sync";
+import { addPlexItems, applyPresence, applyWatched, scanPlex } from "./sync";
+import { clearEpisodeSuppressions, clearMovieSuppression, suppressWatch } from "./suppression";
 
 const MIGRATION_SQL = readdirSync(join("prisma", "migrations"))
   .filter((d) => /^\d+_/.test(d))
@@ -186,6 +187,101 @@ describe("applyPresence", () => {
   });
 });
 
+describe("continuous watched-sync (matched items)", () => {
+  // Seed episodes for the already-tracked show so a watched episode can resolve to the catalog.
+  async function seedShowEpisodes() {
+    await prisma.season.create({ data: { id: "se1", mediaItemId: "mi-show", seasonNumber: 1 } });
+    await prisma.episode.createMany({
+      data: [
+        { id: "ep-s1e1", mediaItemId: "mi-show", seasonId: "se1", seasonNumber: 1, episodeNumber: 1 },
+        { id: "ep-s1e2", mediaItemId: "mi-show", seasonId: "se1", seasonNumber: 1, episodeNumber: 2 },
+      ],
+    });
+  }
+
+  it("collects watch signals for tracked shows + movies and imports them as plex SeenEvents", async () => {
+    await seedShowEpisodes();
+    const r = await scanPlex(deps());
+
+    expect(r.watchedSignals).toEqual(
+      expect.arrayContaining([
+        { mediaItemId: "mi-show", seasonNumber: 1, episodeNumber: 1, watchedAt: new Date(1_710_000_000 * 1000) },
+        { mediaItemId: "mi-movie", seasonNumber: null, episodeNumber: null, watchedAt: new Date(1_700_000_000 * 1000) },
+      ]),
+    );
+
+    const inserted = await applyWatched(prisma, "owner", r.watchedSignals);
+    expect(inserted).toBe(2); // S1E1 of the show + the movie (S1E2 was unwatched in Plex)
+
+    const showSeen = await prisma.seenEvent.findMany({
+      where: { userId: "owner", mediaItemId: "mi-show", source: "plex" },
+    });
+    expect(showSeen.map((e) => e.episodeId)).toEqual(["ep-s1e1"]);
+    const movieSeen = await prisma.seenEvent.findFirst({
+      where: { userId: "owner", mediaItemId: "mi-movie", source: "plex", episodeId: null },
+    });
+    expect(movieSeen?.watchedAt?.getTime()).toBe(1_700_000_000 * 1000);
+
+    // Idempotent — a second apply of the same signals inserts nothing.
+    expect(await applyWatched(prisma, "owner", r.watchedSignals)).toBe(0);
+  });
+
+  it("skips a show's episode fetch when its watched count is unchanged since the last sync", async () => {
+    await seedShowEpisodes();
+    // Cursor says the tracked show (Plex ratingKey "s1") already had 2 watched episodes last sync — and the fake
+    // still reports viewedLeafCount 2 — so it should be skipped; the movie is not cursor-gated.
+    const r = await scanPlex(deps(), { s1: 2 });
+    expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-show")).toBe(false);
+    expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-movie")).toBe(true);
+    // The cursor is refreshed with the current totals for the next run.
+    expect(r.watchCursor.s1).toBe(2);
+  });
+
+  it("never double-logs an episode already in the log, regardless of source", async () => {
+    await seedShowEpisodes();
+    await prisma.seenEvent.create({
+      data: { userId: "owner", mediaItemId: "mi-show", episodeId: "ep-s1e1", source: "app" },
+    });
+
+    const inserted = await applyWatched(prisma, "owner", [
+      { mediaItemId: "mi-show", seasonNumber: 1, episodeNumber: 1, watchedAt: null },
+    ]);
+    expect(inserted).toBe(0);
+    expect(await prisma.seenEvent.count({ where: { mediaItemId: "mi-show", episodeId: "ep-s1e1" } })).toBe(1);
+  });
+
+  it("does not re-import an episode or movie the user has suppressed (unmarked in-app)", async () => {
+    await seedShowEpisodes();
+    await suppressWatch(prisma, "owner", "mi-show", "ep-s1e1");
+    await suppressWatch(prisma, "owner", "mi-movie", null);
+
+    const inserted = await applyWatched(prisma, "owner", [
+      { mediaItemId: "mi-show", seasonNumber: 1, episodeNumber: 1, watchedAt: new Date(1_710_000_000 * 1000) },
+      { mediaItemId: "mi-movie", seasonNumber: null, episodeNumber: null, watchedAt: new Date(1_700_000_000 * 1000) },
+    ]);
+    expect(inserted).toBe(0);
+    expect(await prisma.seenEvent.count({ where: { userId: "owner", source: "plex" } })).toBe(0);
+
+    // Clearing the suppression (re-marking watched in-app) lets the next sync import it again.
+    await clearEpisodeSuppressions(prisma, "owner", ["ep-s1e1"]);
+    await clearMovieSuppression(prisma, "owner", "mi-movie");
+    const inserted2 = await applyWatched(prisma, "owner", [
+      { mediaItemId: "mi-show", seasonNumber: 1, episodeNumber: 1, watchedAt: null },
+      { mediaItemId: "mi-movie", seasonNumber: null, episodeNumber: null, watchedAt: null },
+    ]);
+    expect(inserted2).toBe(2);
+  });
+
+  it("suppressWatch is idempotent for both episodes and movies", async () => {
+    await seedShowEpisodes();
+    await suppressWatch(prisma, "owner", "mi-show", "ep-s1e1");
+    await suppressWatch(prisma, "owner", "mi-show", "ep-s1e1");
+    await suppressWatch(prisma, "owner", "mi-movie", null);
+    await suppressWatch(prisma, "owner", "mi-movie", null);
+    expect(await prisma.plexWatchSuppression.count({ where: { userId: "owner" } })).toBe(2);
+  });
+});
+
 describe("addPlexItems", () => {
   it("hydrates Plex-only titles, tracks them, and imports Plex watched state", async () => {
     const r = await scanPlex(deps());
@@ -195,19 +291,19 @@ describe("addPlexItems", () => {
     // New catalog rows created for the two candidates.
     expect(await prisma.mediaItem.count({ where: { tmdbId: { in: [300, 400] } } })).toBe(2);
 
-    // New Show → tracking "watching" (watched in Plex) + a plex-sourced episode seen event (S1E1).
+    // New Show → on the list (wantToWatch) + a plex-sourced episode seen event (S1E1); "watching" is derived.
     const show = await prisma.mediaItem.findFirst({ where: { tmdbId: 300 } });
     const showState = await prisma.userMediaState.findFirst({ where: { mediaItemId: show!.id } });
-    expect(showState?.tracking).toBe("watching");
+    expect(showState?.wantToWatch).toBe(true);
     const showSeen = await prisma.seenEvent.findMany({
       where: { mediaItemId: show!.id, source: "plex", episodeId: { not: null } },
     });
     expect(showSeen).toHaveLength(1);
 
-    // New Movie → "finished" + a plex-sourced movie seen event with the Plex watch date.
+    // New Movie → on the list + a plex-sourced movie seen event with the Plex watch date; "finished" is derived.
     const movie = await prisma.mediaItem.findFirst({ where: { tmdbId: 400 } });
     const movieState = await prisma.userMediaState.findFirst({ where: { mediaItemId: movie!.id } });
-    expect(movieState?.tracking).toBe("finished");
+    expect(movieState?.wantToWatch).toBe(true);
     const movieSeen = await prisma.seenEvent.findFirst({
       where: { mediaItemId: movie!.id, source: "plex", episodeId: null },
     });

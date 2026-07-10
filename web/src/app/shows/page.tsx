@@ -4,13 +4,13 @@ import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
 import { isPlexConfigured } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getFollowedShows, groupShows, SHOW_GROUP_ORDER, type ShowSummary } from "@/lib/shows";
-import type { DisplayGroup } from "@/lib/progress";
+import { getFollowedShows, groupShows, groupSummary, SHOW_GROUP_ORDER, type ShowSummary } from "@/lib/shows";
+import type { VisibleGroup } from "@/lib/progress";
 import { FavoriteStar } from "./_components/ShowControls";
 
 export const metadata: Metadata = { title: "Shows" };
 
-const GROUP_LABELS: Record<DisplayGroup, string> = {
+const GROUP_LABELS: Record<VisibleGroup, string> = {
   behind: "Behind",
   "up-to-date": "Up to date",
   planned: "Planned",
@@ -80,7 +80,7 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
 }
 
 function ShowCard({ show, canEdit }: { show: ShowSummary; canEdit: boolean }) {
-  const { progress } = show;
+  const summary = groupSummary(show.group, show.progress);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/shows/${show.id}`} className="shrink-0">
@@ -95,13 +95,7 @@ function ShowCard({ show, canEdit }: { show: ShowSummary; canEdit: boolean }) {
             {show.inPlex && <PlexBadge />}
           </div>
           <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {progress.status === "behind" ? (
-              <span className="text-[var(--color-behind)]">{progress.unwatchedAiredCount} to watch</span>
-            ) : progress.status === "finished" ? (
-              "Finished"
-            ) : (
-              "Up to date"
-            )}
+            <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
             {show.status ? ` · ${show.status}` : ""}
           </p>
         </div>

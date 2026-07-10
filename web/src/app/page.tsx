@@ -4,6 +4,7 @@ import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
 import { getDashboard, type BehindShow, type UpcomingEpisode } from "@/lib/dashboard";
 import type { MovieSummary } from "@/lib/movies";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { isManualWatchedEnabled } from "@/lib/settings";
 
 // Home / "Watch next" — the payoff screen (brief §8.1). Behind shows with their next-up episode, upcoming
 // airings for the next two weeks, and a movie-watchlist snippet. Renders the same for viewer and owner; only
@@ -11,8 +12,13 @@ import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session"
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const { behind, upcoming, watchlistMovies } = await getDashboard(displayedUser.id);
-  const empty = behind.length === 0 && upcoming.length === 0 && watchlistMovies.length === 0;
+  const [{ readyInPlex, behind, upcoming, watchlistMovies }, manualWatched] = await Promise.all([
+    getDashboard(displayedUser.id),
+    isManualWatchedEnabled(),
+  ]);
+  const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
+  const empty =
+    readyInPlex.length === 0 && behind.length === 0 && upcoming.length === 0 && watchlistMovies.length === 0;
 
   return (
     <div className="space-y-8">
@@ -21,16 +27,26 @@ export default async function HomePage() {
       {empty && (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
           {canEdit
-            ? "You're all caught up. Import your TV Time export or add a title from Search."
+            ? "You're all caught up. Add a title from Search to track something new."
             : "Nothing to watch right now — all caught up."}
         </div>
+      )}
+
+      {readyInPlex.length > 0 && (
+        <Section title="Watch right now" count={readyInPlex.length}>
+          <ul className="space-y-2">
+            {readyInPlex.map((s) => (
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} />
+            ))}
+          </ul>
+        </Section>
       )}
 
       {behind.length > 0 && (
         <Section title="Behind" count={behind.length}>
           <ul className="space-y-2">
             {behind.map((s) => (
-              <BehindRow key={s.showId} show={s} canEdit={canEdit} />
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} />
             ))}
           </ul>
         </Section>
@@ -78,7 +94,7 @@ function code(seasonNumber: number, episodeNumber: number): string {
   return `S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")}`;
 }
 
-function BehindRow({ show, canEdit }: { show: BehindShow; canEdit: boolean }) {
+function BehindRow({ show, canMarkWatched }: { show: BehindShow; canMarkWatched: boolean }) {
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/shows/${show.showId}`} className="shrink-0">
@@ -96,7 +112,7 @@ function BehindRow({ show, canEdit }: { show: BehindShow; canEdit: boolean }) {
           {show.unwatchedAiredCount > 1 ? ` · +${show.unwatchedAiredCount - 1} more` : ""}
         </p>
       </div>
-      {canEdit && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
+      {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
     </li>
   );
 }

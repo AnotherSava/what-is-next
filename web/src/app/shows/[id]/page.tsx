@@ -4,9 +4,10 @@ import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
 import { getPrisma } from "@/lib/db";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getShowDetail } from "@/lib/shows";
+import { isManualWatchedEnabled } from "@/lib/settings";
+import { getShowDetail, groupSummary } from "@/lib/shows";
 import { EpisodeChecklist } from "../_components/EpisodeChecklist";
-import { FavoriteStar, RefreshShowButton, TrackingSelect } from "../_components/ShowControls";
+import { FavoriteStar, RefreshShowButton, WantToWatchToggle } from "../_components/ShowControls";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -18,16 +19,11 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const show = await getShowDetail(displayedUser.id, id);
+  const [show, manualWatched] = await Promise.all([getShowDetail(displayedUser.id, id), isManualWatchedEnabled()]);
   if (!show) notFound();
 
   const { progress } = show;
-  const summary =
-    progress.status === "behind"
-      ? `${progress.unwatchedAiredCount} to watch`
-      : progress.status === "finished"
-        ? "Finished"
-        : "Up to date";
+  const summary = groupSummary(show.group, progress);
 
   return (
     <div className="space-y-6">
@@ -44,8 +40,8 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
             )}
           </div>
           <p className="text-sm">
-            <span className={progress.status === "behind" ? "text-[var(--color-behind)]" : "text-[var(--color-good)]"}>
-              {summary}
+            <span className={summary.emphasize ? "text-[var(--color-behind)]" : "text-[var(--color-good)]"}>
+              {summary.text}
             </span>
             <span className="text-[var(--color-muted)]">
               {" · "}
@@ -55,7 +51,13 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
           </p>
           {canEdit && (
             <div className="flex items-center gap-3 pt-1">
-              <TrackingSelect showId={show.id} tracking={show.tracking ?? "watching"} />
+              {show.group !== "finished" && (
+                <WantToWatchToggle
+                  showId={show.id}
+                  wantToWatch={show.wantToWatch}
+                  started={show.progress.watchedAiredCount > 0}
+                />
+              )}
               <FavoriteStar showId={show.id} isFavorite={show.isFavorite} />
               <RefreshShowButton showId={show.id} />
             </div>
@@ -65,7 +67,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
 
       {show.overview && <p className="text-sm leading-relaxed text-[var(--color-muted)]">{show.overview}</p>}
 
-      <EpisodeChecklist showId={show.id} seasons={show.seasons} canEdit={canEdit} />
+      <EpisodeChecklist showId={show.id} seasons={show.seasons} canEdit={canEdit && manualWatched} />
     </div>
   );
 }

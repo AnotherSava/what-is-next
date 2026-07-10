@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getPrisma } from "@/lib/db";
+import { clearMovieSuppression, suppressWatch } from "@/lib/plex";
 import { requireOwner } from "@/lib/session";
 
-// Mutations for /movies (brief §8.4). Owner-gated. A movie watch is a SeenEvent with episodeId null; marking
-// watched sets tracking "finished", removing it returns the movie to the "planned" watchlist.
+// Mutations for /movies (brief §8.4). Owner-gated. A movie watch is a SeenEvent with episodeId null; "watched"
+// vs "watchlist" is derived from that log. wantToWatch keeps a movie on the watchlist while unwatched; unmarking
+// a watched movie returns it there.
 
 function revalidateMovies(): void {
   revalidatePath("/movies");
@@ -29,9 +31,10 @@ export async function markMovieWatched(movieId: string, watchedAtISO?: string): 
     });
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: movieId } },
-    create: { userId: owner.id, mediaItemId: movieId, tracking: "finished" },
-    update: { tracking: "finished" },
+    create: { userId: owner.id, mediaItemId: movieId, wantToWatch: true },
+    update: {},
   });
+  await clearMovieSuppression(prisma, owner.id, movieId); // re-marking watched lifts any prior unmark override
   revalidateMovies();
 }
 
@@ -39,10 +42,12 @@ export async function unmarkMovieWatched(movieId: string): Promise<void> {
   const owner = await requireOwner();
   const prisma = getPrisma();
   await prisma.seenEvent.deleteMany({ where: { userId: owner.id, mediaItemId: movieId, episodeId: null } });
+  await suppressWatch(prisma, owner.id, movieId, null); // durable unmark: Plex won't re-import it
+  // Return it to the watchlist (on your list, now unwatched).
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: movieId } },
-    create: { userId: owner.id, mediaItemId: movieId, tracking: "planned" },
-    update: { tracking: "planned" },
+    create: { userId: owner.id, mediaItemId: movieId, wantToWatch: true },
+    update: { wantToWatch: true },
   });
   revalidateMovies();
 }
@@ -56,7 +61,7 @@ export async function toggleMovieFavorite(movieId: string): Promise<void> {
   });
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: movieId } },
-    create: { userId: owner.id, mediaItemId: movieId, tracking: "planned", isFavorite: true },
+    create: { userId: owner.id, mediaItemId: movieId, wantToWatch: true, isFavorite: true },
     update: { isFavorite: !current?.isFavorite },
   });
   revalidateMovies();

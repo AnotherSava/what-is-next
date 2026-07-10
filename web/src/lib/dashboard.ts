@@ -11,6 +11,7 @@ export interface BehindShow {
   title: string;
   posterPath: string | null;
   unwatchedAiredCount: number;
+  inPlex: boolean; // in the user's Plex library → can be played right now
   nextUp: { episodeId: string; seasonNumber: number; episodeNumber: number; title: string | null };
 }
 
@@ -26,7 +27,8 @@ export interface UpcomingEpisode {
 }
 
 export interface Dashboard {
-  behind: BehindShow[];
+  readyInPlex: BehindShow[]; // behind shows you can watch right now — they're in your Plex library
+  behind: BehindShow[]; // behind on, but not in Plex (find them elsewhere)
   upcoming: UpcomingEpisode[];
   watchlistMovies: MovieSummary[];
 }
@@ -42,7 +44,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
   const nextIds = behindShows.map((s) => s.progress.nextUp!.id);
   const nextEps = await prisma.episode.findMany({ where: { id: { in: nextIds } }, select: { id: true, title: true } });
   const titleById = new Map(nextEps.map((e) => [e.id, e.title]));
-  const behind: BehindShow[] = behindShows
+  const behindAll: BehindShow[] = behindShows
     .map((s) => {
       const n = s.progress.nextUp!;
       return {
@@ -50,6 +52,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
         title: s.title,
         posterPath: s.posterPath,
         unwatchedAiredCount: s.progress.unwatchedAiredCount,
+        inPlex: s.inPlex,
         nextUp: {
           episodeId: n.id,
           seasonNumber: n.seasonNumber,
@@ -59,13 +62,16 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       };
     })
     .sort((a, b) => b.unwatchedAiredCount - a.unwatchedAiredCount || a.title.localeCompare(b.title));
+  // Split off the ones you can watch immediately (in Plex) into their own top section.
+  const readyInPlex = behindAll.filter((b) => b.inPlex);
+  const behind = behindAll.filter((b) => !b.inPlex);
 
   const until = isoDatePlusDays(UPCOMING_WINDOW_DAYS, undefined, process.env.TZ);
   const upcomingRows = await prisma.episode.findMany({
     where: {
       isSpecial: false,
       releaseDate: { gt: today, lte: until },
-      mediaItem: { is: { mediaType: "tv", userState: { some: { userId, tracking: "watching" } } } },
+      mediaItem: { is: { mediaType: "tv", userState: { some: { userId, wantToWatch: true } } } },
     },
     select: {
       id: true,
@@ -90,5 +96,5 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
   }));
 
   const { watchlist } = await getMovies(userId);
-  return { behind, upcoming, watchlistMovies: watchlist.slice(0, 6) };
+  return { readyInPlex, behind, upcoming, watchlistMovies: watchlist.slice(0, 6) };
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
+import { clearEpisodeSuppressions, suppressWatch } from "@/lib/plex";
 import { hasAired } from "@/lib/progress";
 import { requireOwner } from "@/lib/session";
 
@@ -10,19 +11,18 @@ import { requireOwner } from "@/lib/session";
 // is the security boundary; hidden buttons are only UX (brief §3.1). Watch state is written to the append-only
 // SeenEvent log with source "app"; "unmark" removes this user's events for the episode (a checklist toggle).
 
-const TRACKINGS = new Set(["planned", "watching", "stopped", "finished"]);
-
 function revalidateShow(showId: string): void {
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/shows");
   revalidatePath("/");
 }
 
-// Ensure the show is followed once it has activity, without clobbering an existing intent.
+// Ensure a state row exists once a show has activity. On first touch it goes on your list (wantToWatch: true);
+// an existing row is left as-is, so a show you deliberately dropped stays off your list until you re-add it.
 async function ensureFollowed(userId: string, mediaItemId: string): Promise<void> {
   await getPrisma().userMediaState.upsert({
     where: { userId_mediaItemId: { userId, mediaItemId } },
-    create: { userId, mediaItemId, tracking: "watching" },
+    create: { userId, mediaItemId, wantToWatch: true },
     update: {},
   });
 }
@@ -38,6 +38,7 @@ export async function markEpisodeWatched(episodeId: string): Promise<void> {
       data: { userId: owner.id, mediaItemId: ep.mediaItemId, episodeId, watchedAt: new Date(), source: "app" },
     });
   }
+  await clearEpisodeSuppressions(prisma, owner.id, [episodeId]); // re-marking watched lifts any prior unmark override
   await ensureFollowed(owner.id, ep.mediaItemId);
   revalidateShow(ep.mediaItemId);
 }
@@ -48,6 +49,7 @@ export async function unmarkEpisodeWatched(episodeId: string): Promise<void> {
   const ep = await prisma.episode.findUnique({ where: { id: episodeId }, select: { mediaItemId: true } });
   if (!ep) return;
   await prisma.seenEvent.deleteMany({ where: { userId: owner.id, episodeId } });
+  await suppressWatch(prisma, owner.id, ep.mediaItemId, episodeId); // durable unmark: Plex won't re-import it
   revalidateShow(ep.mediaItemId);
 }
 
@@ -96,13 +98,14 @@ export async function markWatchedUpTo(episodeId: string): Promise<void> {
   revalidateShow(target.mediaItemId);
 }
 
-export async function setTracking(showId: string, tracking: string): Promise<void> {
+// Toggle whether the show is on your list. Off + nothing watched → off-list (hidden); off + already watched →
+// Stopped. On → Planned / Behind / Up to date (derived from progress).
+export async function setWantToWatch(showId: string, want: boolean): Promise<void> {
   const owner = await requireOwner();
-  if (!TRACKINGS.has(tracking)) return;
   await getPrisma().userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: showId } },
-    create: { userId: owner.id, mediaItemId: showId, tracking },
-    update: { tracking },
+    create: { userId: owner.id, mediaItemId: showId, wantToWatch: want },
+    update: { wantToWatch: want },
   });
   revalidateShow(showId);
 }
@@ -116,7 +119,7 @@ export async function toggleFavorite(showId: string): Promise<void> {
   });
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: showId } },
-    create: { userId: owner.id, mediaItemId: showId, tracking: "watching", isFavorite: true },
+    create: { userId: owner.id, mediaItemId: showId, wantToWatch: true, isFavorite: true },
     update: { isFavorite: !current?.isFavorite },
   });
   revalidateShow(showId);
@@ -137,4 +140,5 @@ async function createMissingSeen(userId: string, mediaItemId: string, episodeIds
   await prisma.seenEvent.createMany({
     data: toCreate.map((episodeId) => ({ userId, mediaItemId, episodeId, watchedAt: now, source: "app" })),
   });
+  await clearEpisodeSuppressions(prisma, userId, toCreate); // re-marking watched lifts any prior unmark overrides
 }

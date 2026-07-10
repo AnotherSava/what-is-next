@@ -9,6 +9,7 @@ import {
   watchedEpisodeIds,
   type DisplayGroup,
   type ShowProgress,
+  type VisibleGroup,
 } from "@/lib/progress";
 
 // Read-side data layer for the shows pages (brief §8.2, §8.3). Loads followed shows for a given user and
@@ -20,7 +21,6 @@ export interface ShowSummary {
   title: string;
   posterPath: string | null;
   status: string | null;
-  tracking: string;
   isFavorite: boolean;
   progress: ShowProgress;
   group: DisplayGroup;
@@ -60,40 +60,64 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
     isPlexConfigured() ? getShowsInPlex(userId) : Promise.resolve(new Set<string>()),
   ]);
 
-  return states.map((st) => {
-    const progress = computeShowProgress({
-      episodes: st.mediaItem.episodes,
-      seenEvents: seenByItem.get(st.mediaItemId) ?? [],
-      airingStatus: st.mediaItem.status,
-      todayISO: today,
-    });
-    return {
-      id: st.mediaItem.id,
-      title: st.mediaItem.title,
-      posterPath: st.mediaItem.posterPath,
-      status: st.mediaItem.status,
-      tracking: st.tracking,
-      isFavorite: st.isFavorite,
-      progress,
-      group: displayGroup(st.tracking, progress.status),
-      inPlex: plexShows.has(st.mediaItemId),
-    };
-  });
+  return states
+    .map((st) => {
+      const progress = computeShowProgress({
+        episodes: st.mediaItem.episodes,
+        seenEvents: seenByItem.get(st.mediaItemId) ?? [],
+        airingStatus: st.mediaItem.status,
+        todayISO: today,
+      });
+      const group = displayGroup(st.wantToWatch, progress);
+      return {
+        id: st.mediaItem.id,
+        title: st.mediaItem.title,
+        posterPath: st.mediaItem.posterPath,
+        status: st.mediaItem.status,
+        isFavorite: st.isFavorite,
+        progress,
+        // A favorite is a strong "keep this around", so it's never hidden — a favorited off-list show shows as Planned.
+        group: group === "off-list" && st.isFavorite ? "planned" : group,
+        inPlex: plexShows.has(st.mediaItemId),
+      };
+    })
+    .filter((s) => s.group !== "off-list"); // not wanted and nothing watched — the default no-opinion state
 }
 
 // The five display buckets for /shows, in presentation order (brief §8.2).
-export const SHOW_GROUP_ORDER: DisplayGroup[] = ["behind", "up-to-date", "planned", "finished", "stopped"];
+export const SHOW_GROUP_ORDER: VisibleGroup[] = ["behind", "up-to-date", "planned", "finished", "stopped"];
 
-export function groupShows(shows: ShowSummary[]): Record<DisplayGroup, ShowSummary[]> {
-  const groups: Record<DisplayGroup, ShowSummary[]> = {
+export function groupShows(shows: ShowSummary[]): Record<VisibleGroup, ShowSummary[]> {
+  const groups: Record<VisibleGroup, ShowSummary[]> = {
     behind: [],
     "up-to-date": [],
     planned: [],
     finished: [],
     stopped: [],
   };
-  for (const s of shows) groups[s.group].push(s);
+  for (const s of shows) {
+    if (s.group === "off-list") continue; // filtered out by getFollowedShows; guard keeps the type exhaustive
+    groups[s.group].push(s);
+  }
   return groups;
+}
+
+// One-line status for a show card/header, keyed on the DISPLAY GROUP (not raw progress) so a Planned or Stopped
+// show doesn't read like "N to watch". emphasize = render in the "behind" accent colour.
+export function groupSummary(group: DisplayGroup, progress: ShowProgress): { text: string; emphasize: boolean } {
+  switch (group) {
+    case "behind":
+      return { text: `${progress.unwatchedAiredCount} to watch`, emphasize: true };
+    case "planned":
+      return { text: "Not started", emphasize: false };
+    case "stopped":
+      return { text: "Stopped", emphasize: false };
+    case "finished":
+      return { text: "Finished", emphasize: false };
+    case "up-to-date":
+    case "off-list": // never displayed (filtered upstream); folded in to keep the switch exhaustive
+      return { text: "Up to date", emphasize: false };
+  }
 }
 
 export interface ShowDetailEpisode {
@@ -128,9 +152,10 @@ export interface ShowDetail {
   backdropPath: string | null;
   tmdbId: number | null;
   releaseDate: string | null;
-  tracking: string | null;
+  wantToWatch: boolean;
   isFavorite: boolean;
   progress: ShowProgress;
+  group: DisplayGroup;
   seasons: ShowDetailSeason[];
   inPlex: boolean;
 }
@@ -210,9 +235,10 @@ export async function getShowDetail(
     backdropPath: item.backdropPath,
     tmdbId: item.tmdbId,
     releaseDate: item.releaseDate,
-    tracking: state?.tracking ?? null,
+    wantToWatch: state?.wantToWatch ?? false,
     isFavorite: state?.isFavorite ?? false,
     progress,
+    group: displayGroup(state?.wantToWatch ?? false, progress),
     seasons,
     inPlex: plexPresence.inPlex,
   };

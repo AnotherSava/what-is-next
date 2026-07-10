@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrisma } from "@/lib/db";
+import { plural } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
-import { getSetting } from "@/lib/settings";
+import { getSetting, isManualWatchedEnabled } from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
-import { BackupNowButton, RefreshNowButton } from "./_components/AdminButtons";
+import { BackupNowButton, ManualWatchedToggle, RefreshNowButton } from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
 import { SyncPlexButton } from "./plex/_components/SyncButton";
 
@@ -38,10 +39,6 @@ function ago(iso: string, nowMs: number): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
-function plural(n: number, noun: string): string {
-  return `${n} ${n === 1 ? noun : `${noun}s`}`;
-}
-
 function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -58,12 +55,13 @@ export default async function AdminPage() {
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const plexOn = isPlexConfigured();
-  const [refresh, backup, plexSync, plexCandidates, tvdbStubs] = await Promise.all([
+  const [refresh, backup, plexSync, plexCandidates, tvdbStubs, manualWatched] = await Promise.all([
     getSetting("refresh:lastRun"),
     getSetting("backup:lastRun"),
     plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
     plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
     getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
+    isManualWatchedEnabled(),
   ]);
   const stale = (iso: string): boolean => nowMs - new Date(iso).getTime() > FRESH_WINDOW_MS;
 
@@ -113,7 +111,7 @@ export default async function AdminPage() {
         : `up to date · ${ago(plexSync.at, nowMs)}`;
   const plexDetail = !plexSync
     ? "Scan matches your Plex library to the catalog and marks what you have."
-    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plexSync.presenceSeasons} seasons marked`;
+    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported`;
 
   // ── Backup ───────────────────────────────────────────────────────────────
   const backupState: JobState = !backup ? "warn" : !backup.ok || stale(backup.at) ? "warn" : "ok";
@@ -186,6 +184,15 @@ export default async function AdminPage() {
           </div>
         </StatusCard>
       </div>
+
+      <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <h2 className="font-medium">Settings</h2>
+        <ManualWatchedToggle enabled={manualWatched} />
+        <p className="text-sm text-[var(--color-muted)]">
+          Off by default — watch state comes from the Plex sync. Turn on to show manual mark-watched controls on the
+          home, show, and movie pages.
+        </p>
+      </section>
     </div>
   );
 }

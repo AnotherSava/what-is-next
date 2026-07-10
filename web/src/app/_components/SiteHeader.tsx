@@ -9,6 +9,7 @@ export function SiteHeader({ isOwner }: { isOwner: boolean }) {
     { href: "/", label: "Watch next" },
     { href: "/shows", label: "Shows" },
     { href: "/movies", label: "Movies" },
+    { href: "/recent", label: "Recently watched" },
     { href: "/lists", label: "Lists" },
     ...(isOwner ? [{ href: "/search", label: "Search" }] : []),
   ];

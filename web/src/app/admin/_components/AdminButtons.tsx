@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
-import { backupNow } from "../actions";
+import { backupNow, setManualWatched } from "../actions";
 import { ACTION_BUTTON_CLASS } from "./buttonStyle";
 
 // Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
@@ -114,6 +114,29 @@ function activePhase(p: RefreshProgress): string {
   if (p.tvdbTotal > 0) return `TVDB ${p.tvdbTotal}/${p.tvdbTotal}`;
   if (p.movieTotal > 0) return `Movies ${p.movieTotal}/${p.movieTotal}`;
   return `Shows ${p.tvTotal}/${p.tvTotal}`;
+}
+
+// Owner toggle for the manual "mark watched" controls. Local state gives instant feedback; the server action
+// persists the flag and revalidates the surfaces that render those controls.
+export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
+  const [checked, setChecked] = useState(enabled);
+  const [pending, start] = useTransition();
+  return (
+    <label className="flex cursor-pointer items-center gap-3 text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={pending}
+        onChange={(e) => {
+          const next = e.target.checked;
+          setChecked(next);
+          start(() => setManualWatched(next));
+        }}
+        className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
+      />
+      <span>Enable manual watched toggle</span>
+    </label>
+  );
 }
 
 export function BackupNowButton() {

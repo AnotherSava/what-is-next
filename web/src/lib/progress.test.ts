@@ -6,7 +6,9 @@ import {
   hasAired,
   isEndedStatus,
   watchedEpisodeIds,
+  type DerivedStatus,
   type ProgressEpisode,
+  type ShowProgress,
 } from "./progress";
 
 const TODAY = "2026-07-08";
@@ -177,14 +179,35 @@ describe("computeShowProgress — next up", () => {
 });
 
 describe("displayGroup", () => {
-  it("planned/stopped intent overrides derived progress", () => {
-    expect(displayGroup("planned", "behind")).toBe("planned");
-    expect(displayGroup("stopped", "behind")).toBe("stopped");
-    expect(displayGroup("planned", "finished")).toBe("planned");
+  const prog = (status: DerivedStatus, watchedAiredCount: number): ShowProgress => ({
+    status,
+    totalCounted: 10,
+    airedCount: 10,
+    watchedAiredCount,
+    unwatchedAiredCount: 10 - watchedAiredCount,
+    nextUp: null,
   });
-  it("watching/finished defer to derived state", () => {
-    expect(displayGroup("watching", "behind")).toBe("behind");
-    expect(displayGroup("watching", "up-to-date")).toBe("up-to-date");
-    expect(displayGroup("finished", "finished")).toBe("finished");
+
+  it("wanted + started defers to derived progress", () => {
+    expect(displayGroup(true, prog("behind", 5))).toBe("behind");
+    expect(displayGroup(true, prog("up-to-date", 10))).toBe("up-to-date");
+  });
+  it("wanted + nothing watched is planned", () => {
+    expect(displayGroup(true, prog("behind", 0))).toBe("planned");
+  });
+  it("not wanted + started is stopped (mid-way or caught up)", () => {
+    expect(displayGroup(false, prog("behind", 5))).toBe("stopped");
+    expect(displayGroup(false, prog("up-to-date", 10))).toBe("stopped");
+  });
+  it("not wanted + nothing watched is off-list (the hidden default)", () => {
+    expect(displayGroup(false, prog("behind", 0))).toBe("off-list");
+  });
+  it("finished (all aired watched + show ended) wins regardless of the flag", () => {
+    expect(displayGroup(true, prog("finished", 10))).toBe("finished");
+    expect(displayGroup(false, prog("finished", 10))).toBe("finished");
+  });
+  it("nothing watched is never 'finished' — an ended/cancelled show with 0 aired stays Planned/off-list", () => {
+    expect(displayGroup(true, prog("finished", 0))).toBe("planned");
+    expect(displayGroup(false, prog("finished", 0))).toBe("off-list");
   });
 });

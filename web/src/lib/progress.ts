@@ -18,9 +18,12 @@ export interface ProgressSeenEvent {
 
 export type DerivedStatus = "behind" | "up-to-date" | "finished";
 
-// How a followed show is grouped for display: the user INTENT (planned/stopped) overrides derived progress
-// (brief §5), otherwise the derived status stands.
-export type DisplayGroup = "behind" | "up-to-date" | "finished" | "planned" | "stopped";
+// How a followed show is grouped for display. Derived entirely from the watch log + one stored intent bit
+// (wantToWatch). "off-list" = not wanted and nothing watched — the default no-opinion state; it is never shown.
+export type DisplayGroup = "behind" | "up-to-date" | "finished" | "planned" | "stopped" | "off-list";
+
+// The display buckets actually shown on /shows — everything except the hidden "off-list" default.
+export type VisibleGroup = Exclude<DisplayGroup, "off-list">;
 
 export interface ShowProgress {
   status: DerivedStatus;
@@ -96,10 +99,22 @@ export function computeShowProgress(input: ComputeShowProgressInput): ShowProgre
   };
 }
 
-// Combine user intent (UserMediaState.tracking) with derived progress into the display bucket (brief §5:
-// planned/stopped override the derived grouping; watching/finished defer to derived state).
-export function displayGroup(tracking: string, derived: DerivedStatus): DisplayGroup {
-  if (tracking === "planned") return "planned";
-  if (tracking === "stopped") return "stopped";
-  return derived;
+// Combine the single stored intent bit (wantToWatch) with derived progress into the display bucket. Progress is
+// the source of truth (watch log + airing status); the flag only splits want-vs-stopped. Deviation from brief §5
+// (which stored a 4-value tracking enum): the enum conflated intent with progress and could drift from the log
+// (a "planned" show you'd started stayed hidden) — collapsed to one flag + derivation so drift is impossible.
+//
+//   nothing watched → Planned if wanted, else off-list (the default; not shown)
+//   finished (all aired watched + show ended) → Finished, regardless of the flag (completion is terminal)
+//   started, wanted     → derived (Behind / Up to date)
+//   started, not wanted → Stopped
+//
+// The nothing-watched gate comes FIRST: computeShowProgress reports "finished" vacuously for a show with no aired
+// episodes + an Ended/Canceled status (e.g. cancelled before airing), but you haven't finished what you never
+// started — such a show is Planned/off-list, not Finished.
+export function displayGroup(wantToWatch: boolean, progress: ShowProgress): DisplayGroup {
+  if (progress.watchedAiredCount === 0) return wantToWatch ? "planned" : "off-list";
+  if (progress.status === "finished") return "finished";
+  if (!wantToWatch) return "stopped";
+  return progress.status; // "behind" | "up-to-date"
 }

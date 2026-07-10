@@ -1,8 +1,8 @@
 import { getPrisma } from "@/lib/db";
-import { setSetting } from "@/lib/settings";
+import { getSetting, setSetting } from "@/lib/settings";
 import { getTmdb } from "@/lib/tmdb";
 import { getPlex } from "./client";
-import { applyPresence, scanPlex, type PlexSyncDeps, type ScanResult } from "./sync";
+import { applyPresence, applyWatched, scanPlex, type PlexSyncDeps, type ScanResult } from "./sync";
 
 // App-level Plex sync orchestration (uses the global singletons). Shared by the admin "Sync now" action and
 // the nightly job so presence + the review list are produced identically. Kept out of sync.ts so that module
@@ -12,12 +12,17 @@ export function plexDeps(userId: string): PlexSyncDeps {
   return { prisma: getPrisma(), plex: getPlex(), tmdb: getTmdb(), userId };
 }
 
-// Scan Plex, replace presence, and store the run summary + the review candidate list. Does NOT add anything —
-// adding is always an explicit, reviewed action.
-export async function syncPlexPresence(userId: string, trigger: "manual" | "cron"): Promise<ScanResult> {
+// Scan Plex, replace presence, import watch state for already-tracked items, and store the run summary + the
+// review candidate list. Does NOT add new titles — adding is always an explicit, reviewed action.
+export async function syncPlexPresence(
+  userId: string,
+  trigger: "manual" | "cron",
+): Promise<ScanResult & { importedWatches: number }> {
   const deps = plexDeps(userId);
-  const r = await scanPlex(deps);
+  const priorCursor = (await getSetting("plex:watchCursor"))?.shows ?? {};
+  const r = await scanPlex(deps, priorCursor);
   await applyPresence(deps.prisma, userId, r.presenceRows);
+  const importedWatches = await applyWatched(deps.prisma, userId, r.watchedSignals);
   const at = new Date().toISOString();
   await setSetting("plex:lastSync", {
     at,
@@ -25,7 +30,9 @@ export async function syncPlexPresence(userId: string, trigger: "manual" | "cron
     matchedShows: r.matchedShows,
     matchedMovies: r.matchedMovies,
     presenceSeasons: r.presenceSeasons,
+    importedWatches,
   });
   await setSetting("plex:candidates", { at, items: r.candidates });
-  return r;
+  await setSetting("plex:watchCursor", { at, shows: r.watchCursor });
+  return { ...r, importedWatches };
 }

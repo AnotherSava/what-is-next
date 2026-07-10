@@ -36,6 +36,7 @@ const plexLastSyncSchema = z.object({
   matchedShows: z.number().int(),
   matchedMovies: z.number().int(),
   presenceSeasons: z.number().int(),
+  importedWatches: z.number().int().default(0), // watch events imported this run; default keeps pre-feature summaries parseable
 });
 
 // A Plex library item that isn't yet in the tracker — surfaced for the "review, then add" flow. Carries the
@@ -59,11 +60,24 @@ const plexCandidatesSchema = z.object({
   items: z.array(plexCandidateSchema),
 });
 
+// User-facing app setting: whether the manual "mark watched" controls are shown. Off by default — watch state
+// comes from the Plex sync, and the owner opts in to manual toggles from the admin page.
+const manualWatchedSchema = z.object({ enabled: z.boolean() });
+
+// Per-show watched-episode-count cursor (Plex integration): plexRatingKey → total viewedLeafCount at the last
+// sync. Lets the next sync skip the /allLeaves fetch for any show whose count is unchanged (see scanPlex).
+const plexWatchCursorSchema = z.object({
+  at: z.string(),
+  shows: z.record(z.string(), z.number().int()),
+});
+
 const SETTING_SCHEMAS = {
   "refresh:lastRun": refreshLastRunSchema,
   "backup:lastRun": backupLastRunSchema,
   "plex:lastSync": plexLastSyncSchema,
   "plex:candidates": plexCandidatesSchema,
+  "plex:watchCursor": plexWatchCursorSchema,
+  "settings:manualWatched": manualWatchedSchema,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
@@ -78,4 +92,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<SettingV
 export async function setSetting<K extends SettingKey>(key: K, value: SettingValue<K>): Promise<void> {
   const json = JSON.stringify(SETTING_SCHEMAS[key].parse(value));
   await getPrisma().setting.upsert({ where: { key }, create: { key, value: json }, update: { value: json } });
+}
+
+// Whether the manual "mark watched" controls are shown in the UI. Off unless the owner has enabled it.
+export async function isManualWatchedEnabled(): Promise<boolean> {
+  return (await getSetting("settings:manualWatched"))?.enabled ?? false;
 }
