@@ -11,13 +11,18 @@ export function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-// Compact single-unit elapsed interval (largest unit only): "5m" / "3h" / "12d". Floors to the unit; clamps to a
-// minimum of "1m" (a sub-minute, zero, or negative interval reads "1m", never "0m"). No seconds; days are unbounded
-// (a year reads "365d"). Bare magnitude — callers append "ago"/"left" as context needs. (Matches printlab's timer.)
+// Compact single-unit elapsed interval (largest unit only): "5m" / "3h" / "12d" / "4mo" / "2y". Floors to the
+// unit; clamps to a minimum of "1m" (a sub-minute, zero, or negative interval reads "1m", never "0m"). No seconds.
+// Months use "mo" (two letters) so they never collide with minutes' "m" — case alone (m vs M) is too easy to
+// misread. A month is approximated as 30 days and a year as 365; the floor guards mean months land in 1mo–12mo
+// and years never read "0y". Bare magnitude — callers append "ago"/"left" as context needs.
 export function formatInterval(ms: number): string {
   const min = Math.floor((ms > 0 ? ms : 0) / 60000);
   if (min < 60) return `${Math.max(1, min)}m`;
   const hrs = Math.floor(min / 60);
   if (hrs < 24) return `${hrs}h`;
-  return `${Math.floor(hrs / 24)}d`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
 }
