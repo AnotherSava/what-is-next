@@ -16,30 +16,46 @@ export function EpisodeChecklist({
   showId,
   seasons,
   canEdit,
+  nextUpSeasonNumber,
 }: {
   showId: string;
   seasons: ShowDetailSeason[];
   canEdit: boolean;
+  nextUpSeasonNumber: number | null; // season holding the next unwatched episode; the only one open by default
 }) {
   return (
     <div className="space-y-2">
       {seasons.map((season) => (
-        <SeasonBlock key={season.seasonNumber} showId={showId} season={season} canEdit={canEdit} />
+        <SeasonBlock
+          key={season.seasonNumber}
+          showId={showId}
+          season={season}
+          canEdit={canEdit}
+          open={season.seasonNumber === nextUpSeasonNumber}
+        />
       ))}
     </div>
   );
 }
 
-function SeasonBlock({ showId, season, canEdit }: { showId: string; season: ShowDetailSeason; canEdit: boolean }) {
+function SeasonBlock({
+  showId,
+  season,
+  canEdit,
+  open,
+}: {
+  showId: string;
+  season: ShowDetailSeason;
+  canEdit: boolean;
+  open: boolean;
+}) {
   const [pending, start] = useTransition();
   const label = season.isSpecials ? "Specials" : (season.title ?? `Season ${season.seasonNumber}`);
   const fullyWatched = season.airedCount > 0 && season.watchedCount >= season.airedCount;
-  // Open seasons that have aired episodes still to watch.
-  const openByDefault = season.airedCount > season.watchedCount;
 
   return (
     <details
-      open={openByDefault}
+      open={open}
       className="group overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">

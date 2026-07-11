@@ -69,7 +69,12 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
 
       {show.overview && <p className="text-sm leading-relaxed text-[var(--color-muted)]">{show.overview}</p>}
 
-      <EpisodeChecklist showId={show.id} seasons={show.seasons} canEdit={canEdit && manualWatched} />
+      <EpisodeChecklist
+        showId={show.id}
+        seasons={show.seasons}
+        canEdit={canEdit && manualWatched}
+        nextUpSeasonNumber={progress.nextUp?.seasonNumber ?? null}
+      />
     </div>
   );
 }

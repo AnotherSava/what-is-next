@@ -225,24 +225,28 @@ export async function getShowDetail(
     else episodesBySeason.set(ep.seasonNumber, [row]);
   }
 
-  const seasons: ShowDetailSeason[] = item.seasons.map((s) => {
-    const episodes = episodesBySeason.get(s.seasonNumber) ?? [];
-    let latest: Date | undefined;
-    for (const e of episodes) {
-      const w = watchedAtByEpisode.get(e.id);
-      if (w && (!latest || w > latest)) latest = w;
-    }
-    return {
-      seasonNumber: s.seasonNumber,
-      isSpecials: s.isSpecials,
-      title: s.title,
-      episodes,
-      airedCount: episodes.filter((e) => e.aired).length,
-      watchedCount: episodes.filter((e) => e.watched).length,
-      inPlex: plexPresence.seasons.has(s.seasonNumber),
-      latestWatchedAt: latest ? displayDate(latest) : null,
-    };
-  });
+  const seasons: ShowDetailSeason[] = item.seasons
+    .map((s) => {
+      const episodes = episodesBySeason.get(s.seasonNumber) ?? [];
+      let latest: Date | undefined;
+      for (const e of episodes) {
+        const w = watchedAtByEpisode.get(e.id);
+        if (w && (!latest || w > latest)) latest = w;
+      }
+      return {
+        seasonNumber: s.seasonNumber,
+        isSpecials: s.isSpecials,
+        title: s.title,
+        episodes,
+        airedCount: episodes.filter((e) => e.aired).length,
+        watchedCount: episodes.filter((e) => e.watched).length,
+        inPlex: plexPresence.seasons.has(s.seasonNumber),
+        latestWatchedAt: latest ? displayDate(latest) : null,
+      };
+    })
+    // Specials (season 0) sort ahead of Season 1 by number, but they're side content — show them after the
+    // regular seasons, keeping numeric order within each group.
+    .sort((a, b) => Number(a.isSpecials) - Number(b.isSpecials) || a.seasonNumber - b.seasonNumber);
 
   return {
     id: item.id,
