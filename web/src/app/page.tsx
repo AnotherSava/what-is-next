@@ -1,30 +1,27 @@
 import Link from "next/link";
-import { Poster } from "@/app/_components/Poster";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
-import { getDashboard, type BehindShow, type UpcomingEpisode } from "@/lib/dashboard";
+import { getDashboard, type BehindShow } from "@/lib/dashboard";
 import { displayDate, nowMs } from "@/lib/datetime";
 import { formatInterval } from "@/lib/format";
-import type { MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 
-// Home / "Watch next" — the payoff screen (brief §8.1). Behind shows with their next-up episode, upcoming
-// airings for the next two weeks, and a movie-watchlist snippet. Renders the same for viewer and owner; only
-// the one-tap "mark watched" affordance is gated on canEdit.
+// Home / "Watch next" — the payoff screen (brief §8.1). Behind shows with their next-up episode, split into
+// "Watch right now" (in Plex) and "Behind". Renders the same for viewer and owner; only the one-tap
+// "mark watched" affordance is gated on canEdit.
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ readyInPlex, behind, upcoming, watchlistMovies }, manualWatched, plexServerId] = await Promise.all([
+  const [{ readyInPlex, behind }, manualWatched, plexServerId] = await Promise.all([
     getDashboard(displayedUser.id),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
-  const empty =
-    readyInPlex.length === 0 && behind.length === 0 && upcoming.length === 0 && watchlistMovies.length === 0;
+  const empty = readyInPlex.length === 0 && behind.length === 0;
 
   return (
     <div className="space-y-8">
@@ -67,29 +64,6 @@ export default async function HomePage() {
               />
             ))}
           </ul>
-        </Section>
-      )}
-
-      {upcoming.length > 0 && (
-        <Section title="Airing in the next 2 weeks" count={upcoming.length}>
-          <ul className="space-y-1.5">
-            {upcoming.map((e) => (
-              <UpcomingRow key={e.episodeId} ep={e} />
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      {watchlistMovies.length > 0 && (
-        <Section title="Movie watchlist" count={watchlistMovies.length}>
-          <ul className="flex gap-3 overflow-x-auto pb-2">
-            {watchlistMovies.map((m) => (
-              <MovieChip key={m.id} movie={m} />
-            ))}
-          </ul>
-          <Link href="/movies?tab=watchlist" className="text-xs text-[var(--color-accent)] hover:underline">
-            See all →
-          </Link>
         </Section>
       )}
     </div>
@@ -152,27 +126,6 @@ function BehindRow({
         </div>
       )}
       {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
-    </li>
-  );
-}
-
-function UpcomingRow({ ep }: { ep: UpcomingEpisode }) {
-  return (
-    <li className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm">
-      <span className="w-24 shrink-0 text-xs text-[var(--color-accent)]">{ep.releaseDate}</span>
-      <Link href={`/shows/${ep.showId}`} className="truncate hover:underline">
-        <span className="font-medium">{ep.showTitle}</span>{" "}
-        <span className="text-xs text-[var(--color-muted)]">{episodeLabel(ep.seasonNumber, ep.episodeNumber)}</span>
-      </Link>
-    </li>
-  );
-}
-
-function MovieChip({ movie }: { movie: MovieSummary }) {
-  return (
-    <li className="w-20 shrink-0">
-      <Poster path={movie.posterPath} alt={movie.title} width={80} height={120} size="w185" />
-      <p className="mt-1 truncate text-[11px] text-[var(--color-muted)]">{movie.title}</p>
     </li>
   );
 }
