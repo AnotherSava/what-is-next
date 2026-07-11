@@ -4,7 +4,6 @@ description: "What's Next tracker — full app built (phases 0-6) and live TV Ti
 metadata: 
   node_type: memory
   type: project
-  originSessionId: a37f7d6f-91a3-498a-9aa8-7b9b1fcc641f
 ---
 
 Self-hosted TV/movie tracker replacing TV Time, in `web/` (Next 16 + Prisma 7/SQLite + Tailwind 4). Spec: `claude-desktop/IMPLEMENTATION_BRIEF.md`. Built phases 0-6 on 2026-07-09: scaffold+auth, TMDB client, importer CLI, core UI, search+dashboard, refresh/admin/backup/export, Dockerfile+compose. 68 vitest tests, lint/format/build green; Docker image builds and the compose stack (migrate→app) boots and serves (verified).
