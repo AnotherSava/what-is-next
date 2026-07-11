@@ -30,6 +30,15 @@ An audit against the live database found two gaps, both fixed by a one-off back-
 1. **Lost episode watches.** Harry Potter and the Ten Years Later and Дыши were TMDB-unresolved _at import time_, so no catalog episodes existed to attach their watches to — their 8 + 8 watched episodes were dropped (and were not even counted in `unmatchedWatched`). Once the TVDB fallback created the episode rows, 16 episode `SeenEvent`s were back-filled (source `tvtime-import`, original watched dates 2026-03-15 and 2026-05-20). Refresh never restores these on its own because it never writes user state.
 2. **List-only title.** "Scavengers Reign" (tvdb 421287 / tmdb 204154) sat in the "Didn't like" list but was never a followed series, so the import created no catalog row. It was added as a catalog row + list item (position 0); the list now holds all 5 items.
 
+## Plex date reconciliation (2026-07-11)
+
+TV Time's `watchedAt` often carried bulk-marking dates (whole seasons stamped on one later day), while Plex holds the actual per-play timestamps. The Plex sync couldn't fix this on its own: `applyWatched` is additive and de-dupes against existing `SeenEvent`s regardless of source, so for any episode/movie TV Time already logged, Plex never wrote its date. A one-time reconcile re-fetched Plex's full watch history (via `scanPlex` with an empty cursor) and, for each item holding a `tvtime-import` event, applied a **`min(TV Time, Plex)` policy** — moving the date to Plex's only where Plex proves an _earlier_ watch, so a late TV Time mark is corrected while a Plex _rewatch_ never overwrites the original first watch.
+
+- **304** episode/movie dates moved earlier to Plex's date (max 34 days; 215 of them ≤3 days). The largest were sloppy TV Time bulk-marks: Upload S4, Better Things S3, Mrs. Maisel S4E1, Game of Thrones S5E1–3.
+- **120** watches where Plex's date was _later_ (rewatches — e.g. Black Mirror S4E1 rewatched 2026, 3 Body Problem binge) kept their original TV Time date.
+- **24** Plex-only watches (already `source = "plex"`) and **1** Plex episode absent from the catalog (numbering mismatch) were left untouched.
+- **Provenance:** only `watchedAt` was corrected — `source` stays `"tvtime-import"` (these watches entered the log via the TV Time migration), so a `tvtime-import` event's date may now differ from the raw export. The reconcile ran from a throwaway script (since removed; recoverable pattern — re-fetch Plex, apply `min` per matched event).
+
 ## Accepted limitations (not bugs — deliberately unfixed)
 
 15 watched episodes could not be matched: TV Time is TVDB-numbered and places these in season tails / specials that TMDB numbers differently. The importer matches strictly on `(season, episode)` and never guesses, so these slots — which don't exist as TMDB episodes — went unmatched. The TVDB fallback can't help (all three shows are TMDB-canonical). The raw export is archived if the watches are ever wanted.
