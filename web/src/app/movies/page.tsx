@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
 import { todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
+import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { isManualWatchedEnabled } from "@/lib/settings";
+import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { MarkWatchedControl, MovieFavoriteStar, UnmarkWatchedButton } from "./_components/MovieControls";
 
 export const metadata: Metadata = { title: "Movies" };
@@ -24,9 +26,10 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
   const active: Tab = tab === "watchlist" ? "watchlist" : "watched";
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ watched, watchlist }, manualWatched] = await Promise.all([
+  const [{ watched, watchlist }, manualWatched, plexServerId] = await Promise.all([
     getMovies(displayedUser.id),
     isManualWatchedEnabled(),
+    isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // manual mark/unmark hidden unless the owner enabled it
   const today = todayISO();
@@ -55,6 +58,7 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
               canEdit={canEdit}
               canMarkWatched={canMarkWatched}
               today={today}
+              plexServerId={plexServerId}
             />
           ))}
         </ul>
@@ -85,21 +89,27 @@ function MovieCard({
   canEdit,
   canMarkWatched,
   today,
+  plexServerId,
 }: {
   movie: MovieSummary;
   tab: Tab;
   canEdit: boolean;
   canMarkWatched: boolean;
   today: string;
+  plexServerId: string | null;
 }) {
   const year = yearOf(movie.releaseDate);
+  const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Poster path={movie.posterPath} alt={movie.title} width={64} height={96} size="w185" />
       <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className="min-w-0">
-          <p className="truncate font-medium">
-            {movie.title} {year && <span className="text-[var(--color-muted)]">({year})</span>}
+          <p className="flex items-center gap-1.5">
+            <span className="truncate font-medium">
+              {movie.title} {year && <span className="text-[var(--color-muted)]">({year})</span>}
+            </span>
+            {movie.inPlex && <PlexBadge href={watchUrl ?? undefined} className="shrink-0" />}
           </p>
           {tab === "watched" && (
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">Watched {watchedDate(movie.watchedAt)}</p>

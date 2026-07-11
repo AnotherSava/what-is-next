@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
-import { isPlexConfigured } from "@/lib/plex";
+import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
+import { getPlexServerId } from "@/lib/settings";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getFollowedShows, groupShows, groupSummary, SHOW_GROUP_ORDER, type ShowSummary } from "@/lib/shows";
 import type { VisibleGroup } from "@/lib/progress";
@@ -33,8 +34,11 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
   const plexOnly = plex === "1";
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const allShows = await getFollowedShows(displayedUser.id);
   const plexEnabled = isPlexConfigured();
+  const [allShows, plexServerId] = await Promise.all([
+    getFollowedShows(displayedUser.id),
+    plexEnabled ? getPlexServerId() : Promise.resolve(null),
+  ]);
   const shows = plexOnly ? allShows.filter((s) => s.inPlex) : allShows;
   const groups = groupShows(shows);
 
@@ -69,7 +73,7 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
             </h2>
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {sortShows(groups[g]).map((show) => (
-                <ShowCard key={show.id} show={show} canEdit={canEdit} />
+                <ShowCard key={show.id} show={show} canEdit={canEdit} plexServerId={plexServerId} />
               ))}
             </ul>
           </section>
@@ -79,8 +83,17 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function ShowCard({ show, canEdit }: { show: ShowSummary; canEdit: boolean }) {
+function ShowCard({
+  show,
+  canEdit,
+  plexServerId,
+}: {
+  show: ShowSummary;
+  canEdit: boolean;
+  plexServerId: string | null;
+}) {
   const summary = groupSummary(show.group, show.progress);
+  const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/shows/${show.id}`} className="shrink-0">
@@ -92,7 +105,7 @@ function ShowCard({ show, canEdit }: { show: ShowSummary; canEdit: boolean }) {
             <Link href={`/shows/${show.id}`} className="truncate font-medium hover:underline">
               {show.title}
             </Link>
-            {show.inPlex && <PlexBadge />}
+            {show.inPlex && <PlexBadge href={watchUrl ?? undefined} />}
           </div>
           <p className="mt-0.5 text-xs text-[var(--color-muted)]">
             <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>

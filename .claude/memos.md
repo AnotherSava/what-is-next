@@ -4,4 +4,4 @@ Off-task ideas captured during sessions, to revisit later. Managed by `/memo`; o
 
 - [x] 2026-07-10 01:09 — check attribution rules
 - [x] 2026-07-10 01:09 — add description on what refresh does!
-- [ ] 2026-07-10 10:04 — open plex link to watch
+- [x] 2026-07-10 10:04 — open plex link to watch

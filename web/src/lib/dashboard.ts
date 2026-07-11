@@ -12,6 +12,7 @@ export interface BehindShow {
   posterPath: string | null;
   unwatchedAiredCount: number;
   inPlex: boolean; // in the user's Plex library → can be played right now
+  plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (when inPlex)
   nextUp: { episodeId: string; seasonNumber: number; episodeNumber: number; title: string | null };
 }
 
@@ -53,6 +54,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
         posterPath: s.posterPath,
         unwatchedAiredCount: s.progress.unwatchedAiredCount,
         inPlex: s.inPlex,
+        plexRatingKey: s.plexRatingKey,
         nextUp: {
           episodeId: n.id,
           seasonNumber: n.seasonNumber,

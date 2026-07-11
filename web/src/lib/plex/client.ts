@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import {
   plexEpisodesResponseSchema,
+  plexIdentitySchema,
   plexItemsResponseSchema,
   plexSeasonsResponseSchema,
   plexSectionsResponseSchema,
@@ -48,6 +49,12 @@ export class PlexClient {
     this.token = opts.token;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? 15_000;
+  }
+
+  // The server's stable machineIdentifier — used to build app.plex.tv deep links to watch an item.
+  async getMachineIdentifier(): Promise<string> {
+    const data = await this.get("/identity", plexIdentitySchema);
+    return data.MediaContainer.machineIdentifier;
   }
 
   // The TV + movie libraries (ignores music/photo sections).

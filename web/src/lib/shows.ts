@@ -1,6 +1,6 @@
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
-import { getShowPlexPresence, getShowsInPlex, isPlexConfigured } from "@/lib/plex";
+import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured } from "@/lib/plex";
 import {
   compareEpisodes,
   computeShowProgress,
@@ -25,6 +25,7 @@ export interface ShowSummary {
   progress: ShowProgress;
   group: DisplayGroup;
   inPlex: boolean;
+  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
 const EPISODE_SELECT = {
@@ -57,7 +58,7 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
       include: { mediaItem: { include: { episodes: { select: EPISODE_SELECT } } } },
     }),
     seenEpisodesByItem(userId),
-    isPlexConfigured() ? getShowsInPlex(userId) : Promise.resolve(new Set<string>()),
+    isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
   ]);
 
   return states
@@ -79,6 +80,7 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         // A favorite is a strong "keep this around", so it's never hidden — a favorited off-list show shows as Planned.
         group: group === "off-list" && st.isFavorite ? "planned" : group,
         inPlex: plexShows.has(st.mediaItemId),
+        plexRatingKey: plexShows.get(st.mediaItemId) ?? null,
       };
     })
     .filter((s) => s.group !== "off-list"); // not wanted and nothing watched — the default no-opinion state
@@ -158,6 +160,7 @@ export interface ShowDetail {
   group: DisplayGroup;
   seasons: ShowDetailSeason[];
   inPlex: boolean;
+  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
 export async function getShowDetail(
@@ -183,7 +186,7 @@ export async function getShowDetail(
     }),
     isPlexConfigured()
       ? getShowPlexPresence(userId, showId)
-      : Promise.resolve({ inPlex: false, seasons: new Set<number>() }),
+      : Promise.resolve({ inPlex: false, seasons: new Set<number>(), ratingKey: null }),
   ]);
   const watched = watchedEpisodeIds(seen);
   const progress = computeShowProgress({
@@ -241,5 +244,6 @@ export async function getShowDetail(
     group: displayGroup(state?.wantToWatch ?? false, progress),
     seasons,
     inPlex: plexPresence.inPlex,
+    plexRatingKey: plexPresence.ratingKey,
   };
 }

@@ -23,6 +23,7 @@ export interface PlexSyncDeps {
 export interface PresenceRow {
   mediaItemId: string;
   seasonNumber: number | null;
+  plexRatingKey: string; // the show/movie's Plex ratingKey — lets the UI deep-link into Plex to watch it
 }
 
 // A watched item observed in Plex, to be reconciled into the SeenEvent log. seasonNumber/episodeNumber null = a
@@ -114,11 +115,11 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
           matchedShows++;
           if (present.length > 0) {
             for (const n of present) {
-              presenceRows.push({ mediaItemId: match, seasonNumber: n });
+              presenceRows.push({ mediaItemId: match, seasonNumber: n, plexRatingKey: item.ratingKey });
               presenceSeasons++;
             }
           } else {
-            presenceRows.push({ mediaItemId: match, seasonNumber: null }); // present, seasons unknown
+            presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey }); // present, seasons unknown
           }
           // Continuous watched-sync for this already-tracked show. Skip the per-show /allLeaves fetch unless the
           // show's total watched-episode count changed since the last sync — so a steady-state sync does zero
@@ -144,7 +145,7 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
       } else {
         if (match) {
           matchedMovies++;
-          presenceRows.push({ mediaItemId: match, seasonNumber: null });
+          presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey });
           // Continuous watched-sync: a watched movie already in the catalog gets a plex-sourced SeenEvent.
           if ((item.viewCount ?? 0) > 0)
             watchedSignals.push({
@@ -274,7 +275,12 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
   await prisma.plexPresence.deleteMany({ where: { userId } });
   if (rows.length > 0) {
     await prisma.plexPresence.createMany({
-      data: rows.map((r) => ({ userId, mediaItemId: r.mediaItemId, seasonNumber: r.seasonNumber })),
+      data: rows.map((r) => ({
+        userId,
+        mediaItemId: r.mediaItemId,
+        seasonNumber: r.seasonNumber,
+        plexRatingKey: r.plexRatingKey,
+      })),
     });
   }
 }

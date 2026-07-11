@@ -44,7 +44,7 @@ function SeasonBlock({ showId, season, canEdit }: { showId: string; season: Show
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
         <span className="font-medium">{label}</span>
-        {season.inPlex && <PlexBadge />}
+        {season.inPlex && <PlexBadge dot />}
         <span className="text-sm text-[var(--color-muted)]">
           {season.watchedCount}/{season.airedCount || season.episodes.length}
         </span>

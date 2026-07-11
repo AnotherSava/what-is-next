@@ -231,13 +231,16 @@ model ListItem {
 // show-level presence; rows with seasonNumber mark which TV seasons are present. A sync REPLACES the whole set
 // for the user (deleteMany + createMany), so there's no upsert/null-unique concern.
 model PlexPresence {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mediaItemId  String
-  mediaItem    MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-  seasonNumber Int? // null = movie / show-level; set = a specific TV season present in Plex
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId   String
+  mediaItem     MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  seasonNumber  Int? // null = movie / show-level; set = a specific TV season present in Plex
+  plexRatingKey String? // the item's Plex ratingKey (the show/movie, not the season) — used to deep-link into
+  //                        Plex to watch it. Same value on every row of a show; null on rows written before this
+  //                        column existed, until the next sync back-fills them.
+  updatedAt     DateTime  @updatedAt
 
   @@index([userId, mediaItemId])
   @@index([userId])

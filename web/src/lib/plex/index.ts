@@ -10,7 +10,8 @@ export {
   type ScanResult,
   type WatchedSignal,
 } from "./sync";
-export { getShowPlexPresence, getShowsInPlex } from "./presence";
+export { getPlexPresenceKeys, getShowPlexPresence } from "./presence";
+export { plexWatchUrl, plexWebUrl } from "./link";
 export { plexDeps, syncPlexPresence } from "./run";
 export { parseGuids } from "./schemas";
 export { clearEpisodeSuppressions, clearMovieSuppression, suppressWatch } from "./suppression";

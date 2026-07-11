@@ -4,6 +4,12 @@ import { z } from "zod";
 // external JSON). Plex wraps everything in a MediaContainer and returns far more than we read; schemas are
 // permissive and pick only what the sync needs. Requested with `Accept: application/json`.
 
+// GET /identity → server identity. machineIdentifier is the stable server id needed to build app.plex.tv deep
+// links (…/server/{machineIdentifier}/details?key=…). Unprotected endpoint; we still send the token like every call.
+export const plexIdentitySchema = z.object({
+  MediaContainer: z.object({ machineIdentifier: z.string() }),
+});
+
 export const plexGuidSchema = z.object({ id: z.string() });
 
 // GET /library/sections → the libraries. type is "show" | "movie" | "artist" | ...

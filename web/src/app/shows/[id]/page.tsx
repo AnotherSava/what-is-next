@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
 import { getPrisma } from "@/lib/db";
+import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { isManualWatchedEnabled } from "@/lib/settings";
+import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { getShowDetail, groupSummary } from "@/lib/shows";
 import { EpisodeChecklist } from "../_components/EpisodeChecklist";
 import { FavoriteStar, RefreshShowButton, WantToWatchToggle } from "../_components/ShowControls";
@@ -19,11 +20,16 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [show, manualWatched] = await Promise.all([getShowDetail(displayedUser.id, id), isManualWatchedEnabled()]);
+  const [show, manualWatched, plexServerId] = await Promise.all([
+    getShowDetail(displayedUser.id, id),
+    isManualWatchedEnabled(),
+    isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
+  ]);
   if (!show) notFound();
 
   const { progress } = show;
   const summary = groupSummary(show.group, progress);
+  const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
 
   return (
     <div className="space-y-6">
@@ -33,7 +39,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold leading-tight">{show.title}</h1>
-              {show.inPlex && <PlexBadge />}
+              {show.inPlex && <PlexBadge href={watchUrl ?? undefined} />}
             </div>
             {show.originalTitle && show.originalTitle !== show.title && (
               <p className="text-sm text-[var(--color-muted)]">{show.originalTitle}</p>

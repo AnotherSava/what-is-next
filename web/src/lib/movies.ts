@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/db";
+import { getPlexPresenceKeys, isPlexConfigured } from "@/lib/plex";
 
 // Read-side data layer for /movies (brief §8.4). A movie is "watched" iff it has a SeenEvent (episodeId null)
 // — the append-only log is the source of truth — and its watch date is the latest such event. An unwatched movie
@@ -14,6 +15,8 @@ export interface MovieSummary {
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null;
+  inPlex: boolean;
+  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
 export interface MoviesView {
@@ -23,7 +26,7 @@ export interface MoviesView {
 
 export async function getMovies(userId: string): Promise<MoviesView> {
   const prisma = getPrisma();
-  const [states, seen] = await Promise.all([
+  const [states, seen, plexMovies] = await Promise.all([
     prisma.userMediaState.findMany({
       where: { userId, mediaItem: { is: { mediaType: "movie" } } },
       include: { mediaItem: true },
@@ -33,6 +36,7 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       where: { userId, episodeId: null, mediaItem: { is: { mediaType: "movie" } } },
       select: { mediaItemId: true, watchedAt: true },
     }),
+    isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
   ]);
 
   // Latest watch date per movie (null "seen, date unknown" events still mark it watched).
@@ -60,6 +64,8 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       isFavorite: st.isFavorite,
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,
+      inPlex: plexMovies.has(st.mediaItemId),
+      plexRatingKey: plexMovies.get(st.mediaItemId) ?? null,
     };
     if (isWatched) watched.push(summary);
     else watchlist.push(summary);

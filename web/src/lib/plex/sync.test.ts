@@ -140,8 +140,8 @@ describe("scanPlex", () => {
     expect(r.presenceSeasons).toBe(1); // Tracked Show season 1
     expect(r.presenceRows).toEqual(
       expect.arrayContaining([
-        { mediaItemId: "mi-show", seasonNumber: 1 },
-        { mediaItemId: "mi-movie", seasonNumber: null },
+        { mediaItemId: "mi-show", seasonNumber: 1, plexRatingKey: "s1" },
+        { mediaItemId: "mi-movie", seasonNumber: null, plexRatingKey: "m1" },
       ]),
     );
     expect(r.candidates.map((c) => c.title).sort()).toEqual(["New Movie", "New Show"]);
@@ -169,7 +169,7 @@ describe("scanPlex", () => {
 });
 
 describe("applyPresence", () => {
-  it("writes show + season + movie presence rows", async () => {
+  it("writes show + season + movie presence rows, each carrying the item's Plex ratingKey", async () => {
     const r = await scanPlex(deps());
     await applyPresence(prisma, "owner", r.presenceRows);
     const rows = await prisma.plexPresence.findMany({ where: { userId: "owner" } });
@@ -177,11 +177,14 @@ describe("applyPresence", () => {
     expect(
       rows.filter((x) => x.mediaItemId === "mi-show" && x.seasonNumber != null).map((x) => x.seasonNumber),
     ).toEqual([1]);
+    // The ratingKey is persisted so the UI can deep-link into Plex to watch it.
+    expect(rows.find((x) => x.mediaItemId === "mi-show")?.plexRatingKey).toBe("s1");
+    expect(rows.find((x) => x.mediaItemId === "mi-movie")?.plexRatingKey).toBe("m1");
   });
 
   it("is a full snapshot — re-applying replaces prior rows", async () => {
-    await applyPresence(prisma, "owner", [{ mediaItemId: "mi-show", seasonNumber: 5 }]);
-    await applyPresence(prisma, "owner", [{ mediaItemId: "mi-show", seasonNumber: 1 }]);
+    await applyPresence(prisma, "owner", [{ mediaItemId: "mi-show", seasonNumber: 5, plexRatingKey: "s1" }]);
+    await applyPresence(prisma, "owner", [{ mediaItemId: "mi-show", seasonNumber: 1, plexRatingKey: "s1" }]);
     const rows = await prisma.plexPresence.findMany({ where: { userId: "owner", mediaItemId: "mi-show" } });
     expect(rows.map((x) => x.seasonNumber)).toEqual([1]);
   });

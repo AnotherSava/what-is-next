@@ -24,6 +24,12 @@ export async function syncPlexPresence(
   await applyPresence(deps.prisma, userId, r.presenceRows);
   const importedWatches = await applyWatched(deps.prisma, userId, r.watchedSignals);
   const at = new Date().toISOString();
+  // Record the server id for watch deep links — best-effort, so a hiccup here never fails the whole sync.
+  try {
+    await setSetting("plex:server", { at, machineIdentifier: await deps.plex.getMachineIdentifier() });
+  } catch {
+    // leave the prior value (if any) in place; links stay available from the last good sync
+  }
   await setSetting("plex:lastSync", {
     at,
     trigger,

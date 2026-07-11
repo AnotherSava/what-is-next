@@ -71,12 +71,17 @@ const plexWatchCursorSchema = z.object({
   shows: z.record(z.string(), z.number().int()),
 });
 
+// The Plex server's stable machineIdentifier (Plex integration), captured each sync. Combined with a per-item
+// plexRatingKey it builds an app.plex.tv deep link to watch the item. See src/lib/plex/link.ts.
+const plexServerSchema = z.object({ at: z.string(), machineIdentifier: z.string() });
+
 const SETTING_SCHEMAS = {
   "refresh:lastRun": refreshLastRunSchema,
   "backup:lastRun": backupLastRunSchema,
   "plex:lastSync": plexLastSyncSchema,
   "plex:candidates": plexCandidatesSchema,
   "plex:watchCursor": plexWatchCursorSchema,
+  "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
 } as const;
 
@@ -97,4 +102,9 @@ export async function setSetting<K extends SettingKey>(key: K, value: SettingVal
 // Whether the manual "mark watched" controls are shown in the UI. Off unless the owner has enabled it.
 export async function isManualWatchedEnabled(): Promise<boolean> {
   return (await getSetting("settings:manualWatched"))?.enabled ?? false;
+}
+
+// The Plex server's machineIdentifier, or null until a sync has recorded it — needed to build watch deep links.
+export async function getPlexServerId(): Promise<string | null> {
+  return (await getSetting("plex:server"))?.machineIdentifier ?? null;
 }

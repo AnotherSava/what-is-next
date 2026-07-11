@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
 import { getDashboard, type BehindShow, type UpcomingEpisode } from "@/lib/dashboard";
 import type { MovieSummary } from "@/lib/movies";
+import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { isManualWatchedEnabled } from "@/lib/settings";
+import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 
 // Home / "Watch next" — the payoff screen (brief §8.1). Behind shows with their next-up episode, upcoming
 // airings for the next two weeks, and a movie-watchlist snippet. Renders the same for viewer and owner; only
@@ -12,9 +14,10 @@ import { isManualWatchedEnabled } from "@/lib/settings";
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ readyInPlex, behind, upcoming, watchlistMovies }, manualWatched] = await Promise.all([
+  const [{ readyInPlex, behind, upcoming, watchlistMovies }, manualWatched, plexServerId] = await Promise.all([
     getDashboard(displayedUser.id),
     isManualWatchedEnabled(),
+    isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
   const empty =
@@ -36,7 +39,7 @@ export default async function HomePage() {
         <Section title="Watch right now" count={readyInPlex.length}>
           <ul className="space-y-2">
             {readyInPlex.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} />
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} />
             ))}
           </ul>
         </Section>
@@ -46,7 +49,7 @@ export default async function HomePage() {
         <Section title="Behind" count={behind.length}>
           <ul className="space-y-2">
             {behind.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} />
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} />
             ))}
           </ul>
         </Section>
@@ -94,7 +97,16 @@ function code(seasonNumber: number, episodeNumber: number): string {
   return `S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")}`;
 }
 
-function BehindRow({ show, canMarkWatched }: { show: BehindShow; canMarkWatched: boolean }) {
+function BehindRow({
+  show,
+  canMarkWatched,
+  plexServerId,
+}: {
+  show: BehindShow;
+  canMarkWatched: boolean;
+  plexServerId: string | null;
+}) {
+  const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/shows/${show.showId}`} className="shrink-0">
@@ -112,6 +124,7 @@ function BehindRow({ show, canMarkWatched }: { show: BehindShow; canMarkWatched:
           {show.unwatchedAiredCount > 1 ? ` · +${show.unwatchedAiredCount - 1} more` : ""}
         </p>
       </div>
+      {show.inPlex && <PlexBadge href={watchUrl ?? undefined} className="shrink-0" />}
       {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
     </li>
   );
