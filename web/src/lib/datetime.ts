@@ -7,17 +7,35 @@ export function nowMs(): number {
   return Date.now();
 }
 
-// Today's date as "YYYY-MM-DD" in the given timezone (defaults to the TZ env var, else the system zone).
-export function todayISO(now: Date = new Date(), timeZone: string | undefined = process.env.TZ): string {
+// A given moment's calendar date as "YYYY-MM-DD" in the given timezone (defaults to the TZ env var, else the
+// system zone). The machine form for date logic ("has it aired" comparisons, today's date); displayDate is the
+// human/UI form.
+export function isoDate(date: Date, timeZone: string | undefined = process.env.TZ): string {
   try {
     // en-CA formats as YYYY-MM-DD.
     return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
-      now,
+      date,
     );
   } catch {
     // Invalid TZ → fall back to the system zone.
-    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
   }
+}
+
+// A moment's calendar date in a human, UI-facing form: "Jun 2, 2026" (in the given timezone, default TZ env).
+// The single source for rendering watch dates across the app; isoDate stays the machine form for date logic.
+export function displayDate(date: Date, timeZone: string | undefined = process.env.TZ): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "short", day: "numeric" }).format(date);
+  } catch {
+    // Invalid TZ → fall back to the system zone.
+    return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(date);
+  }
+}
+
+// Today's date as "YYYY-MM-DD" in the given timezone (defaults to the TZ env var, else the system zone).
+export function todayISO(now: Date = new Date(), timeZone: string | undefined = process.env.TZ): string {
+  return isoDate(now, timeZone);
 }
 
 // Date N days from `from`, as "YYYY-MM-DD" in the given timezone. Used for the "next 2 weeks" upcoming window.

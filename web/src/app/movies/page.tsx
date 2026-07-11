@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PosterPlay } from "@/app/_components/PosterPlay";
-import { todayISO } from "@/lib/datetime";
+import { displayDate, todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -17,7 +17,7 @@ function yearOf(releaseDate: string | null): string {
 }
 
 function watchedDate(d: Date | null): string {
-  return d ? new Intl.DateTimeFormat("en-CA").format(d) : "date unknown";
+  return d ? displayDate(d) : "date unknown";
 }
 
 export default async function MoviesPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {

@@ -1,4 +1,4 @@
-import { todayISO } from "@/lib/datetime";
+import { displayDate, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured } from "@/lib/plex";
 import {
@@ -132,6 +132,7 @@ export interface ShowDetailEpisode {
   isSpecial: boolean;
   aired: boolean;
   watched: boolean;
+  watchedAt: string | null; // local calendar date of the (most recent) watch; null = watched but date unknown, or unwatched
 }
 
 export interface ShowDetailSeason {
@@ -142,6 +143,7 @@ export interface ShowDetailSeason {
   airedCount: number;
   watchedCount: number;
   inPlex: boolean;
+  latestWatchedAt: string | null; // most recent watch across the season's episodes; shown in the header when folded
 }
 
 export interface ShowDetail {
@@ -181,13 +183,20 @@ export async function getShowDetail(
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: showId } } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: showId, episodeId: { not: null } },
-      select: { episodeId: true },
+      select: { episodeId: true, watchedAt: true },
     }),
     isPlexConfigured()
       ? getShowPlexPresence(userId, showId)
       : Promise.resolve({ seasons: new Set<number>(), ratingKey: null }),
   ]);
   const watched = watchedEpisodeIds(seen);
+  // Most recent dated watch per episode (a rewatch adds another SeenEvent); undated watches contribute nothing.
+  const watchedAtByEpisode = new Map<string, Date>();
+  for (const s of seen) {
+    if (!s.episodeId || !s.watchedAt) continue;
+    const prev = watchedAtByEpisode.get(s.episodeId);
+    if (!prev || s.watchedAt > prev) watchedAtByEpisode.set(s.episodeId, s.watchedAt);
+  }
   const progress = computeShowProgress({
     episodes: item.episodes,
     seenEvents: seen,
@@ -198,6 +207,7 @@ export async function getShowDetail(
   const episodesBySeason = new Map<number, ShowDetailEpisode[]>();
   for (const ep of [...item.episodes].sort(compareEpisodes)) {
     const aired = hasAired(ep.releaseDate, today);
+    const watchedAt = watchedAtByEpisode.get(ep.id);
     const row: ShowDetailEpisode = {
       id: ep.id,
       seasonNumber: ep.seasonNumber,
@@ -208,6 +218,7 @@ export async function getShowDetail(
       isSpecial: ep.isSpecial,
       aired,
       watched: watched.has(ep.id),
+      watchedAt: watchedAt ? displayDate(watchedAt) : null,
     };
     const arr = episodesBySeason.get(ep.seasonNumber);
     if (arr) arr.push(row);
@@ -216,6 +227,11 @@ export async function getShowDetail(
 
   const seasons: ShowDetailSeason[] = item.seasons.map((s) => {
     const episodes = episodesBySeason.get(s.seasonNumber) ?? [];
+    let latest: Date | undefined;
+    for (const e of episodes) {
+      const w = watchedAtByEpisode.get(e.id);
+      if (w && (!latest || w > latest)) latest = w;
+    }
     return {
       seasonNumber: s.seasonNumber,
       isSpecials: s.isSpecials,
@@ -224,6 +240,7 @@ export async function getShowDetail(
       airedCount: episodes.filter((e) => e.aired).length,
       watchedCount: episodes.filter((e) => e.watched).length,
       inPlex: plexPresence.seasons.has(s.seasonNumber),
+      latestWatchedAt: latest ? displayDate(latest) : null,
     };
   });
 

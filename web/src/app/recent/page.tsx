@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Poster } from "@/app/_components/Poster";
+import { displayDate } from "@/lib/datetime";
 import { getRecentWatches, type RecentWatch } from "@/lib/recent";
 import { getDisplayedUser } from "@/lib/session";
 
@@ -12,7 +13,7 @@ function epCode(season: number | null, episode: number | null): string {
 }
 
 function shortDate(d: Date | null): string {
-  return d ? new Intl.DateTimeFormat("en-CA").format(d) : "date unknown";
+  return d ? displayDate(d) : "date unknown";
 }
 
 // Where a watch came from — shown as a small tag so the feed makes its provenance explicit.

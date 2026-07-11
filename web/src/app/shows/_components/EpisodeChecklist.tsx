@@ -40,7 +40,7 @@ function SeasonBlock({ showId, season, canEdit }: { showId: string; season: Show
   return (
     <details
       open={openByDefault}
-      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
+      className="group overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
         <span className="font-medium">{label}</span>
@@ -48,6 +48,16 @@ function SeasonBlock({ showId, season, canEdit }: { showId: string; season: Show
         <span className="text-sm text-[var(--color-muted)]">
           {season.watchedCount}/{season.airedCount || season.episodes.length}
         </span>
+        {/* Folded seasons hide their per-episode dates, so surface the season's latest watch here instead —
+            right-aligned to match the episode rows (ml-auto; the button keeps its own for the no-date case). */}
+        {season.latestWatchedAt && (
+          <span
+            className="ml-auto text-sm text-[var(--color-muted)] group-open:hidden"
+            title={`Last watched ${season.latestWatchedAt}`}
+          >
+            {season.latestWatchedAt}
+          </span>
+        )}
         {canEdit && !fullyWatched && season.airedCount > 0 && (
           <button
             type="button"
@@ -111,6 +121,12 @@ function EpisodeRow({ ep, canEdit }: { ep: ShowDetailEpisode; canEdit: boolean }
         )}
         {!ep.aired && !ep.releaseDate && <span className="ml-2 text-xs text-[var(--color-muted)]">unaired</span>}
       </span>
+
+      {ep.watched && ep.watchedAt && (
+        <span className="shrink-0 text-xs text-[var(--color-muted)]" title={`Watched ${ep.watchedAt}`}>
+          {ep.watchedAt}
+        </span>
+      )}
 
       {canEdit && ep.aired && !ep.watched && (
         <button

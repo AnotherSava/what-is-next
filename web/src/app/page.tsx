@@ -3,7 +3,7 @@ import { Poster } from "@/app/_components/Poster";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
 import { getDashboard, type BehindShow, type UpcomingEpisode } from "@/lib/dashboard";
-import { nowMs } from "@/lib/datetime";
+import { displayDate, nowMs } from "@/lib/datetime";
 import { formatInterval } from "@/lib/format";
 import type { MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
@@ -42,7 +42,13 @@ export default async function HomePage() {
         <Section title="Watch right now" count={readyInPlex.length}>
           <ul className="space-y-2">
             {readyInPlex.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} now={now} />
+              <BehindRow
+                key={s.showId}
+                show={s}
+                canMarkWatched={canMarkWatched}
+                plexServerId={plexServerId}
+                now={now}
+              />
             ))}
           </ul>
         </Section>
@@ -52,7 +58,13 @@ export default async function HomePage() {
         <Section title="Behind" count={behind.length}>
           <ul className="space-y-2">
             {behind.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} now={now} />
+              <BehindRow
+                key={s.showId}
+                show={s}
+                canMarkWatched={canMarkWatched}
+                plexServerId={plexServerId}
+                now={now}
+              />
             ))}
           </ul>
         </Section>
@@ -129,7 +141,7 @@ function BehindRow({
         <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">
           <span>
             {show.lastWatchedAt && (
-              <span title={`Last watched ${new Intl.DateTimeFormat("en-CA").format(show.lastWatchedAt)}`}>
+              <span title={`Last watched ${displayDate(show.lastWatchedAt)}`}>
                 {formatInterval(now - show.lastWatchedAt.getTime())} ago
               </span>
             )}
