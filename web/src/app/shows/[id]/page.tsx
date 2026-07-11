@@ -7,7 +7,7 @@ import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session"
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { getShowDetail, groupSummary } from "@/lib/shows";
 import { EpisodeChecklist } from "../_components/EpisodeChecklist";
-import { FavoriteStar, RefreshShowButton, WantToWatchToggle } from "../_components/ShowControls";
+import { FavoriteStar, RefreshShowButton, TrackToggle } from "../_components/ShowControls";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -54,10 +54,11 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
           {canEdit && (
             <div className="flex items-center gap-3 pt-1">
               {show.group !== "finished" && (
-                <WantToWatchToggle
+                <TrackToggle
                   showId={show.id}
                   wantToWatch={show.wantToWatch}
                   started={show.progress.watchedAiredCount > 0}
+                  isFavorite={show.isFavorite}
                 />
               )}
               <FavoriteStar showId={show.id} isFavorite={show.isFavorite} />

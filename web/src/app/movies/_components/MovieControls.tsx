@@ -19,7 +19,7 @@ export function MovieFavoriteStar({ movieId, isFavorite }: { movieId: string; is
         isFavorite ? "text-[var(--color-behind)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"
       }`}
     >
-      {isFavorite ? "★" : "☆"}
+      {isFavorite ? "♥" : "♡"}
     </button>
   );
 }

@@ -3,10 +3,9 @@ import Link from "next/link";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getPlexServerId } from "@/lib/settings";
-import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { getDisplayedUser } from "@/lib/session";
 import { getFollowedShows, groupShows, groupSummary, SHOW_GROUP_ORDER, type ShowSummary } from "@/lib/shows";
 import type { VisibleGroup } from "@/lib/progress";
-import { FavoriteStar } from "./_components/ShowControls";
 
 export const metadata: Metadata = { title: "Shows" };
 
@@ -31,8 +30,7 @@ function sortShows(shows: ShowSummary[]): ShowSummary[] {
 export default async function ShowsPage({ searchParams }: { searchParams: Promise<{ plex?: string }> }) {
   const { plex } = await searchParams;
   const plexOnly = plex === "1";
-  const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
-  const { canEdit } = permissionsFor(sessionUser, displayedUser);
+  const displayedUser = await getDisplayedUser();
   const plexEnabled = isPlexConfigured();
   const [allShows, plexServerId] = await Promise.all([
     getFollowedShows(displayedUser.id),
@@ -72,7 +70,7 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
             </h2>
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {sortShows(groups[g]).map((show) => (
-                <ShowCard key={show.id} show={show} canEdit={canEdit} plexServerId={plexServerId} />
+                <ShowCard key={show.id} show={show} plexServerId={plexServerId} />
               ))}
             </ul>
           </section>
@@ -82,15 +80,7 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function ShowCard({
-  show,
-  canEdit,
-  plexServerId,
-}: {
-  show: ShowSummary;
-  canEdit: boolean;
-  plexServerId: string | null;
-}) {
+function ShowCard({ show, plexServerId }: { show: ShowSummary; plexServerId: string | null }) {
   const summary = groupSummary(show.group, show.progress);
   const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
@@ -107,11 +97,8 @@ function ShowCard({
           </p>
         </div>
         <div className="flex items-center justify-end">
-          {canEdit ? (
-            <FavoriteStar showId={show.id} isFavorite={show.isFavorite} />
-          ) : show.isFavorite ? (
-            <span className="text-xl leading-none text-[var(--color-behind)]">★</span>
-          ) : null}
+          {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
+          {show.isFavorite && <span className="text-xl leading-none text-[var(--color-behind)]">♥</span>}
         </div>
       </div>
     </li>

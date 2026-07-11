@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { refreshShow } from "@/app/admin/actions";
-import { setWantToWatch, toggleFavorite } from "../actions";
+import { StopTrackingButton } from "@/app/_components/StopTrackingButton";
+import { setTracking, toggleFavorite } from "../actions";
 
 export function RefreshShowButton({ showId }: { showId: string }) {
   const [pending, start] = useTransition();
@@ -36,43 +37,37 @@ export function FavoriteStar({ showId, isFavorite }: { showId: string; isFavorit
         isFavorite ? "text-[var(--color-behind)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"
       }`}
     >
-      {isFavorite ? "★" : "☆"}
+      {isFavorite ? "♥" : "♡"}
     </button>
   );
 }
 
-// "On my list" toggle — the one stored intent bit. Off + nothing watched hides the show; off + already watched
-// marks it Stopped; on surfaces it as Planned / Behind / Up to date (all derived). `started` (any episode watched)
-// only tunes the labels.
-export function WantToWatchToggle({
+// Track / untrack toggle — the one stored intent bit. Tracked → an ✕ that confirms before stopping (off-list if
+// unstarted, Stopped if already started). Untracked → a button to (re)start tracking: "Resume" for a show you
+// dropped, "Track" for a fresh one. `started` (any episode watched) picks between those two. A favorite is a
+// deliberate keep and can't be untracked, so the ✕ is hidden while it's favorited (unfavorite first to stop).
+export function TrackToggle({
   showId,
   wantToWatch,
   started,
+  isFavorite,
 }: {
   showId: string;
   wantToWatch: boolean;
   started: boolean;
+  isFavorite: boolean;
 }) {
   const [pending, start] = useTransition();
-  const title = wantToWatch
-    ? started
-      ? "Remove from your list (marks it Stopped)"
-      : "Remove from your list"
-    : "Add to your list";
+  if (wantToWatch) return isFavorite ? null : <StopTrackingButton onConfirm={() => setTracking(showId, false)} />;
   return (
     <button
       type="button"
       disabled={pending}
-      aria-pressed={wantToWatch}
-      title={title}
-      onClick={() => start(() => setWantToWatch(showId, !wantToWatch))}
-      className={`rounded-md border px-2.5 py-1 text-sm transition-colors disabled:opacity-50 ${
-        wantToWatch
-          ? "border-transparent bg-[var(--color-accent-strong)] text-white hover:bg-[var(--color-accent)]"
-          : "border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
-      }`}
+      title="Add to your list"
+      onClick={() => start(() => setTracking(showId, true))}
+      className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-sm text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] disabled:opacity-50"
     >
-      {wantToWatch ? "✓ On my list" : started ? "Resume" : "Add to list"}
+      {started ? "Resume" : "Track"}
     </button>
   );
 }

@@ -98,9 +98,9 @@ export async function markWatchedUpTo(episodeId: string): Promise<void> {
   revalidateShow(target.mediaItemId);
 }
 
-// Toggle whether the show is on your list. Off + nothing watched → off-list (hidden); off + already watched →
-// Stopped. On → Planned / Behind / Up to date (derived from progress).
-export async function setWantToWatch(showId: string, want: boolean): Promise<void> {
+// Track / untrack the show (flips the one stored intent bit). Off + nothing watched → off-list (hidden); off +
+// already watched → Stopped. On → Planned / Behind / Up to date (derived from progress).
+export async function setTracking(showId: string, want: boolean): Promise<void> {
   const owner = await requireOwner();
   await getPrisma().userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: showId } },

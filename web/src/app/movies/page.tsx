@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PosterPlay } from "@/app/_components/PosterPlay";
+import { StopTrackingButton } from "@/app/_components/StopTrackingButton";
 import { displayDate, todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
-import { MarkWatchedControl, MovieFavoriteStar, UnmarkWatchedButton } from "./_components/MovieControls";
+import { untrackMovie } from "./actions";
+import { MarkWatchedControl, UnmarkWatchedButton } from "./_components/MovieControls";
 
 export const metadata: Metadata = { title: "Movies" };
 
@@ -104,9 +106,17 @@ function MovieCard({
       <PosterPlay path={movie.posterPath} alt={movie.title} width={64} height={96} size="w185" watchUrl={watchUrl} />
       <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className="min-w-0">
-          <p className="truncate font-medium">
-            {movie.title} {year && <span className="text-[var(--color-muted)]">({year})</span>}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <Link href={`/movies/${movie.id}`} className="min-w-0 truncate font-medium hover:underline">
+              {movie.title} {year && <span className="font-normal text-[var(--color-muted)]">({year})</span>}
+            </Link>
+            {/* Untrack lives in the top-right corner, aligned with the title. Watchlist only. */}
+            {canEdit && tab === "watchlist" && (
+              <span className="shrink-0">
+                <StopTrackingButton onConfirm={untrackMovie.bind(null, movie.id)} />
+              </span>
+            )}
+          </div>
           {tab === "watched" && (
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">Watched {watchedDate(movie.watchedAt)}</p>
           )}
@@ -120,11 +130,10 @@ function MovieCard({
                 <MarkWatchedControl movieId={movie.id} today={today} />
               ))}
           </div>
-          {canEdit ? (
-            <MovieFavoriteStar movieId={movie.id} isFavorite={movie.isFavorite} />
-          ) : movie.isFavorite ? (
-            <span className="text-xl leading-none text-[var(--color-behind)]">★</span>
-          ) : null}
+          {/* Read-only badge only — favoriting happens on the movie page, and only for watched movies. */}
+          {tab === "watched" && movie.isFavorite && (
+            <span className="text-xl leading-none text-[var(--color-behind)]">♥</span>
+          )}
         </div>
       </div>
     </li>
