@@ -96,8 +96,8 @@ function Section({ title, count, children }: { title: string; count: number; chi
   );
 }
 
-function code(seasonNumber: number, episodeNumber: number): string {
-  return `S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")}`;
+function episodeLabel(seasonNumber: number, episodeNumber: number): string {
+  return `Season ${seasonNumber}, Episode ${episodeNumber}`;
 }
 
 function BehindRow({
@@ -119,21 +119,24 @@ function BehindRow({
         <Link href={`/shows/${show.showId}`} className="block truncate text-lg font-medium hover:underline">
           {show.title}
         </Link>
-        <p className="truncate text-sm text-[var(--color-muted)]">
-          <span className="font-mono text-[var(--color-behind)]">
-            {code(show.nextUp.seasonNumber, show.nextUp.episodeNumber)}
-          </span>{" "}
-          {show.nextUp.title ?? ""}
+        <p className="truncate text-sm text-[var(--color-behind)]">
+          {episodeLabel(show.nextUp.seasonNumber, show.nextUp.episodeNumber)}
         </p>
+        <p className="min-h-5 truncate text-sm text-[var(--color-muted)]">{show.nextUp.title}</p>
       </div>
       {(show.lastWatchedAt || show.unwatchedAiredCount > 1) && (
-        <div className="flex shrink-0 flex-col items-end text-xs text-[var(--color-muted)]">
-          {show.lastWatchedAt && (
-            <span title={`Last watched ${new Intl.DateTimeFormat("en-CA").format(show.lastWatchedAt)}`}>
-              {formatInterval(now - show.lastWatchedAt.getTime())} ago
-            </span>
-          )}
-          {show.unwatchedAiredCount > 1 && <span className="opacity-60">+{show.unwatchedAiredCount - 1} more</span>}
+        // Mirror the left column's 3 lines: last-watched on top, "+N more" on the bottom, empty middle.
+        <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">
+          <span>
+            {show.lastWatchedAt && (
+              <span title={`Last watched ${new Intl.DateTimeFormat("en-CA").format(show.lastWatchedAt)}`}>
+                {formatInterval(now - show.lastWatchedAt.getTime())} ago
+              </span>
+            )}
+          </span>
+          <span className="opacity-60">
+            {show.unwatchedAiredCount > 1 ? `+${show.unwatchedAiredCount - 1} more` : ""}
+          </span>
         </div>
       )}
       {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
@@ -147,7 +150,7 @@ function UpcomingRow({ ep }: { ep: UpcomingEpisode }) {
       <span className="w-24 shrink-0 text-xs text-[var(--color-accent)]">{ep.releaseDate}</span>
       <Link href={`/shows/${ep.showId}`} className="truncate hover:underline">
         <span className="font-medium">{ep.showTitle}</span>{" "}
-        <span className="font-mono text-xs text-[var(--color-muted)]">{code(ep.seasonNumber, ep.episodeNumber)}</span>
+        <span className="text-xs text-[var(--color-muted)]">{episodeLabel(ep.seasonNumber, ep.episodeNumber)}</span>
       </Link>
     </li>
   );
