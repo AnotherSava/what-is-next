@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { plural } from "@/lib/format";
+import { plural, seconds } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
 import { getSetting } from "@/lib/settings";
@@ -52,7 +52,7 @@ async function PlexPanel() {
           <SyncPlexButton />
           <p className="text-sm text-[var(--color-muted)]">
             {lastSync
-              ? `Last sync ${when(lastSync.at)} (${lastSync.trigger}) — ${plural(lastSync.matchedShows, "show")} · ${plural(lastSync.matchedMovies, "movie")} · ${plural(lastSync.presenceSeasons, "season")} marked · ${plural(lastSync.importedWatches, "watch", "watches")} imported`
+              ? `Last sync ${when(lastSync.at)} (${lastSync.trigger}) — ${plural(lastSync.matchedShows, "show")} · ${plural(lastSync.matchedMovies, "movie")} · ${plural(lastSync.presenceSeasons, "season")} marked · ${plural(lastSync.importedWatches, "watch", "watches")} imported · ${seconds(lastSync.durationMs)}`
               : "Never synced. Scan matches your Plex library to the catalog and marks what you have."}
           </p>
         </div>

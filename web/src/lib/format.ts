@@ -6,6 +6,11 @@ export function plural(n: number, singular: string, pluralForm: string = `${sing
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
+// A job duration in whole-tenths of a second: "3.2s". For the sub-minute elapsed times the nightly jobs report.
+export function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // Compact single-unit elapsed interval (largest unit only): "5m" / "3h" / "12d". Floors to the unit; clamps to a
 // minimum of "1m" (a sub-minute, zero, or negative interval reads "1m", never "0m"). No seconds; days are unbounded
 // (a year reads "365d"). Bare magnitude — callers append "ago"/"left" as context needs. (Matches printlab's timer.)

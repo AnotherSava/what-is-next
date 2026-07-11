@@ -188,6 +188,14 @@ describe("applyPresence", () => {
     const rows = await prisma.plexPresence.findMany({ where: { userId: "owner", mediaItemId: "mi-show" } });
     expect(rows.map((x) => x.seasonNumber)).toEqual([1]);
   });
+
+  it("reports whether the set changed vs. what was stored (drives the on-view refresh)", async () => {
+    const row = { mediaItemId: "mi-show", seasonNumber: 1, plexRatingKey: "s1" };
+    expect(await applyPresence(prisma, "owner", [row])).toBe(true); // empty → one row
+    expect(await applyPresence(prisma, "owner", [row])).toBe(false); // identical snapshot
+    expect(await applyPresence(prisma, "owner", [{ ...row, seasonNumber: 2 }])).toBe(true); // season differs
+    expect(await applyPresence(prisma, "owner", [])).toBe(true); // rows removed
+  });
 });
 
 describe("continuous watched-sync (matched items)", () => {

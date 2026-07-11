@@ -1,10 +1,20 @@
 import Link from "next/link";
+import { FreshnessDot } from "./FreshnessDot";
 
 // Top navigation, shared by viewer and owner renders. Content destinations sit on the left; the owner's Admin
 // console + Sign in sit on the right (Sign out lives in the footer). Owner-only destinations (Search adds
 // catalog rows; Admin runs refresh/backups/Plex sync) appear only when isOwner — but that's UX; the routes
 // themselves are guarded server-side (proxy.ts for /admin, requireOwner() in each action).
-export function SiteHeader({ isOwner }: { isOwner: boolean }) {
+//
+// freshness (owner + Plex configured only) drives the little dot beside Admin: how current the Plex-synced watch
+// data on the page is. Null when there's nothing to report (no Plex, or never synced).
+export function SiteHeader({
+  isOwner,
+  freshness,
+}: {
+  isOwner: boolean;
+  freshness: { lastSyncAt: string; staleThresholdMs: number } | null;
+}) {
   const links: { href: string; label: string }[] = [
     { href: "/", label: "Watch next" },
     { href: "/shows", label: "Shows" },
@@ -28,11 +38,16 @@ export function SiteHeader({ isOwner }: { isOwner: boolean }) {
             </Link>
           ))}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {isOwner ? (
-            <Link href="/admin" className={itemClass}>
-              Admin
-            </Link>
+            <>
+              {freshness && (
+                <FreshnessDot lastSyncAt={freshness.lastSyncAt} staleThresholdMs={freshness.staleThresholdMs} />
+              )}
+              <Link href="/admin" className={itemClass}>
+                Admin
+              </Link>
+            </>
           ) : (
             <Link href="/login" className={itemClass}>
               Sign in

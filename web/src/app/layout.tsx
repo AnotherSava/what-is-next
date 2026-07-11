@@ -1,7 +1,10 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { isPlexConfigured, viewSyncTtlMs } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { getSetting } from "@/lib/settings";
 import { Footer } from "./_components/Footer";
+import { PlexFreshener } from "./_components/PlexFreshener";
 import { SiteHeader } from "./_components/SiteHeader";
 
 export const metadata: Metadata = {
@@ -23,12 +26,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { isAdmin } = permissionsFor(sessionUser, displayedUser);
 
+  // Freshness dot beside Admin (owner + Plex configured only): how current the page's Plex-synced watch data is.
+  // Red once the last sync is 3× the sync interval old — genuinely behind.
+  const plexLastSync = isAdmin && isPlexConfigured() ? await getSetting("plex:lastSync") : null;
+  const freshness = plexLastSync ? { lastSyncAt: plexLastSync.at, staleThresholdMs: 3 * viewSyncTtlMs() } : null;
+
   return (
     <html lang="en">
       <body className="flex min-h-dvh flex-col">
-        <SiteHeader isOwner={isAdmin} />
+        <SiteHeader isOwner={isAdmin} freshness={freshness} />
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
         <Footer isOwner={isAdmin} />
+        {isAdmin && isPlexConfigured() && <PlexFreshener />}
       </body>
     </html>
   );

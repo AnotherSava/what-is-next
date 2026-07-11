@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrisma } from "@/lib/db";
-import { plural } from "@/lib/format";
+import { plural, seconds } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
 import { getSetting, isManualWatchedEnabled } from "@/lib/settings";
@@ -37,10 +37,6 @@ function ago(iso: string, nowMs: number): string {
   const h = Math.round(min / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.round(h / 24)}d ago`;
-}
-
-function seconds(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 // Owner console (brief §8.7). proxy.ts already requires a session to reach /admin; this re-checks role. The page
@@ -111,7 +107,7 @@ export default async function AdminPage() {
         : `up to date · ${ago(plexSync.at, nowMs)}`;
   const plexDetail = !plexSync
     ? "Scan matches your Plex library to the catalog and marks what you have."
-    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported`;
+    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported · ${seconds(plexSync.durationMs)}`;
 
   // ── Backup ───────────────────────────────────────────────────────────────
   const backupState: JobState = !backup ? "warn" : !backup.ok || stale(backup.at) ? "warn" : "ok";

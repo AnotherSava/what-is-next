@@ -32,11 +32,12 @@ const backupLastRunSchema = z.object({
 // Plex sync bookkeeping (Plex integration): last run summary for the admin page.
 const plexLastSyncSchema = z.object({
   at: z.string(),
-  trigger: z.enum(["cron", "manual"]),
+  trigger: z.enum(["cron", "manual", "view"]),
   matchedShows: z.number().int(),
   matchedMovies: z.number().int(),
   presenceSeasons: z.number().int(),
   importedWatches: z.number().int().default(0), // watch events imported this run; default keeps pre-feature summaries parseable
+  durationMs: z.number().int().default(0), // wall-clock of the sync; default keeps pre-timing summaries parseable
 });
 
 // A Plex library item that isn't yet in the tracker — surfaced for the "review, then add" flow. Carries the

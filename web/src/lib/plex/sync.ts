@@ -270,8 +270,19 @@ export async function applyWatched(prisma: PrismaClient, userId: string, signals
   return toCreate.length;
 }
 
-// Replace the whole presence set for the user (a sync is a full snapshot).
-export async function applyPresence(prisma: PrismaClient, userId: string, rows: PresenceRow[]): Promise<void> {
+// Replace the whole presence set for the user (a sync is a full snapshot). Returns whether the set actually
+// changed vs. what was stored — the on-view freshener uses this to refresh the page only on a real delta.
+export async function applyPresence(prisma: PrismaClient, userId: string, rows: PresenceRow[]): Promise<boolean> {
+  const existing = await prisma.plexPresence.findMany({
+    where: { userId },
+    select: { mediaItemId: true, seasonNumber: true, plexRatingKey: true },
+  });
+  const sig = (r: { mediaItemId: string; seasonNumber: number | null; plexRatingKey: string | null }) =>
+    `${r.mediaItemId}|${r.seasonNumber}|${r.plexRatingKey}`;
+  const before = new Set(existing.map(sig));
+  const after = new Set(rows.map(sig));
+  const changed = before.size !== after.size || [...after].some((s) => !before.has(s));
+
   await prisma.plexPresence.deleteMany({ where: { userId } });
   if (rows.length > 0) {
     await prisma.plexPresence.createMany({
@@ -283,6 +294,7 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
       })),
     });
   }
+  return changed;
 }
 
 // Add selected Plex-only titles to your list: hydrate from TMDB, create UserMediaState, import Plex watched
