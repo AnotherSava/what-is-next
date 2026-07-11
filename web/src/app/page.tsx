@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { PlexBadge } from "@/app/_components/PlexBadge";
 import { Poster } from "@/app/_components/Poster";
+import { PosterPlay } from "@/app/_components/PosterPlay";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
 import { getDashboard, type BehindShow, type UpcomingEpisode } from "@/lib/dashboard";
+import { nowMs } from "@/lib/datetime";
+import { formatInterval } from "@/lib/format";
 import type { MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -20,6 +22,7 @@ export default async function HomePage() {
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
+  const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
   const empty =
     readyInPlex.length === 0 && behind.length === 0 && upcoming.length === 0 && watchlistMovies.length === 0;
 
@@ -39,7 +42,7 @@ export default async function HomePage() {
         <Section title="Watch right now" count={readyInPlex.length}>
           <ul className="space-y-2">
             {readyInPlex.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} />
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} now={now} />
             ))}
           </ul>
         </Section>
@@ -49,7 +52,7 @@ export default async function HomePage() {
         <Section title="Behind" count={behind.length}>
           <ul className="space-y-2">
             {behind.map((s) => (
-              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} />
+              <BehindRow key={s.showId} show={s} canMarkWatched={canMarkWatched} plexServerId={plexServerId} now={now} />
             ))}
           </ul>
         </Section>
@@ -101,30 +104,38 @@ function BehindRow({
   show,
   canMarkWatched,
   plexServerId,
+  now,
 }: {
   show: BehindShow;
   canMarkWatched: boolean;
   plexServerId: string | null;
+  now: number;
 }) {
   const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <Link href={`/shows/${show.showId}`} className="shrink-0">
-        <Poster path={show.posterPath} alt={show.title} width={48} height={72} size="w185" />
-      </Link>
+      <PosterPlay path={show.posterPath} alt={show.title} width={48} height={72} size="w185" watchUrl={watchUrl} />
       <div className="min-w-0 flex-1">
-        <Link href={`/shows/${show.showId}`} className="block truncate font-medium hover:underline">
+        <Link href={`/shows/${show.showId}`} className="block truncate text-lg font-medium hover:underline">
           {show.title}
         </Link>
-        <p className="truncate text-xs text-[var(--color-muted)]">
+        <p className="truncate text-sm text-[var(--color-muted)]">
           <span className="font-mono text-[var(--color-behind)]">
             {code(show.nextUp.seasonNumber, show.nextUp.episodeNumber)}
           </span>{" "}
           {show.nextUp.title ?? ""}
-          {show.unwatchedAiredCount > 1 ? ` · +${show.unwatchedAiredCount - 1} more` : ""}
         </p>
       </div>
-      {show.inPlex && <PlexBadge href={watchUrl ?? undefined} className="shrink-0" />}
+      {(show.lastWatchedAt || show.unwatchedAiredCount > 1) && (
+        <div className="flex shrink-0 flex-col items-end text-xs text-[var(--color-muted)]">
+          {show.lastWatchedAt && (
+            <span title={`Last watched ${new Intl.DateTimeFormat("en-CA").format(show.lastWatchedAt)}`}>
+              {formatInterval(now - show.lastWatchedAt.getTime())} ago
+            </span>
+          )}
+          {show.unwatchedAiredCount > 1 && <span className="opacity-60">+{show.unwatchedAiredCount - 1} more</span>}
+        </div>
+      )}
       {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
     </li>
   );

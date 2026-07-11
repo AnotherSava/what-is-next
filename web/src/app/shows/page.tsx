@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PlexBadge } from "@/app/_components/PlexBadge";
-import { Poster } from "@/app/_components/Poster";
+import { PosterPlay } from "@/app/_components/PosterPlay";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getPlexServerId } from "@/lib/settings";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -96,17 +95,12 @@ function ShowCard({
   const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <Link href={`/shows/${show.id}`} className="shrink-0">
-        <Poster path={show.posterPath} alt={show.title} width={64} height={96} size="w185" />
-      </Link>
+      <PosterPlay path={show.posterPath} alt={show.title} width={64} height={96} size="w185" watchUrl={watchUrl} />
       <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <Link href={`/shows/${show.id}`} className="truncate font-medium hover:underline">
-              {show.title}
-            </Link>
-            {show.inPlex && <PlexBadge href={watchUrl ?? undefined} />}
-          </div>
+          <Link href={`/shows/${show.id}`} className="block truncate font-medium hover:underline">
+            {show.title}
+          </Link>
           <p className="mt-0.5 text-xs text-[var(--color-muted)]">
             <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
             {show.status ? ` · ${show.status}` : ""}

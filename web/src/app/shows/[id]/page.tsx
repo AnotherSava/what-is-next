@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PlexBadge } from "@/app/_components/PlexBadge";
-import { Poster } from "@/app/_components/Poster";
+import { PosterPlay } from "@/app/_components/PosterPlay";
 import { getPrisma } from "@/lib/db";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -34,13 +33,10 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ id:
   return (
     <div className="space-y-6">
       <div className="flex gap-4">
-        <Poster path={show.posterPath} alt={show.title} width={120} height={180} size="w342" />
+        <PosterPlay path={show.posterPath} alt={show.title} width={120} height={180} size="w342" watchUrl={watchUrl} />
         <div className="min-w-0 flex-1 space-y-2">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold leading-tight">{show.title}</h1>
-              {show.inPlex && <PlexBadge href={watchUrl ?? undefined} />}
-            </div>
+            <h1 className="text-xl font-semibold leading-tight">{show.title}</h1>
             {show.originalTitle && show.originalTitle !== show.title && (
               <p className="text-sm text-[var(--color-muted)]">{show.originalTitle}</p>
             )}

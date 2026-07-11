@@ -9,7 +9,7 @@ export function plexWebUrl(machineIdentifier: string, ratingKey: string): string
 }
 
 // Convenience for the common "I may or may not have both pieces" case: returns a watch URL only when the server
-// id and the item's ratingKey are both known, else null (so the UI shows a plain badge instead of a link).
+// id and the item's ratingKey are both known, else null (so the poster renders plain, with no play overlay).
 export function plexWatchUrl(machineIdentifier: string | null, ratingKey: string | null | undefined): string | null {
   if (!machineIdentifier || !ratingKey) return null;
   return plexWebUrl(machineIdentifier, ratingKey);

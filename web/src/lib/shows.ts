@@ -159,7 +159,6 @@ export interface ShowDetail {
   progress: ShowProgress;
   group: DisplayGroup;
   seasons: ShowDetailSeason[];
-  inPlex: boolean;
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
@@ -186,7 +185,7 @@ export async function getShowDetail(
     }),
     isPlexConfigured()
       ? getShowPlexPresence(userId, showId)
-      : Promise.resolve({ inPlex: false, seasons: new Set<number>(), ratingKey: null }),
+      : Promise.resolve({ seasons: new Set<number>(), ratingKey: null }),
   ]);
   const watched = watchedEpisodeIds(seen);
   const progress = computeShowProgress({
@@ -243,7 +242,6 @@ export async function getShowDetail(
     progress,
     group: displayGroup(state?.wantToWatch ?? false, progress),
     seasons,
-    inPlex: plexPresence.inPlex,
     plexRatingKey: plexPresence.ratingKey,
   };
 }

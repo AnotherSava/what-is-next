@@ -23,11 +23,11 @@ export async function getPlexPresenceKeys(userId: string): Promise<Map<string, s
   return map;
 }
 
-// Presence for one show in a single query: whether it's in Plex at all, which seasons, and the show's ratingKey.
+// Presence for one show in a single query: which seasons are in Plex and the show's ratingKey (for a watch link).
 export async function getShowPlexPresence(
   userId: string,
   mediaItemId: string,
-): Promise<{ inPlex: boolean; seasons: Set<number>; ratingKey: string | null }> {
+): Promise<{ seasons: Set<number>; ratingKey: string | null }> {
   const rows = await getPrisma().plexPresence.findMany({
     where: { userId, mediaItemId },
     select: { seasonNumber: true, plexRatingKey: true },
@@ -38,5 +38,5 @@ export async function getShowPlexPresence(
     if (r.seasonNumber != null) seasons.add(r.seasonNumber);
     if (r.plexRatingKey != null) ratingKey = r.plexRatingKey;
   }
-  return { inPlex: rows.length > 0, seasons, ratingKey };
+  return { seasons, ratingKey };
 }

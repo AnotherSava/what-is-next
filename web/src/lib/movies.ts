@@ -15,7 +15,6 @@ export interface MovieSummary {
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null;
-  inPlex: boolean;
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
@@ -64,7 +63,6 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       isFavorite: st.isFavorite,
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,
-      inPlex: plexMovies.has(st.mediaItemId),
       plexRatingKey: plexMovies.get(st.mediaItemId) ?? null,
     };
     if (isWatched) watched.push(summary);

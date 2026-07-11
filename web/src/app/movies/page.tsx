@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PlexBadge } from "@/app/_components/PlexBadge";
-import { Poster } from "@/app/_components/Poster";
+import { PosterPlay } from "@/app/_components/PosterPlay";
 import { todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
@@ -102,14 +101,11 @@ function MovieCard({
   const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <Poster path={movie.posterPath} alt={movie.title} width={64} height={96} size="w185" />
+      <PosterPlay path={movie.posterPath} alt={movie.title} width={64} height={96} size="w185" watchUrl={watchUrl} />
       <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5">
-            <span className="truncate font-medium">
-              {movie.title} {year && <span className="text-[var(--color-muted)]">({year})</span>}
-            </span>
-            {movie.inPlex && <PlexBadge href={watchUrl ?? undefined} className="shrink-0" />}
+          <p className="truncate font-medium">
+            {movie.title} {year && <span className="text-[var(--color-muted)]">({year})</span>}
           </p>
           {tab === "watched" && (
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">Watched {watchedDate(movie.watchedAt)}</p>
