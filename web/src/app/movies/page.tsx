@@ -116,24 +116,22 @@ function MovieCard({
                 <StopTrackingButton onConfirm={untrackMovie.bind(null, movie.id)} />
               </span>
             )}
+            {/* Read-only badge only — favoriting happens on the movie page, and only for watched movies. */}
+            {tab === "watched" && movie.isFavorite && (
+              <span className="shrink-0 text-xl leading-none text-[var(--color-behind)]">♥</span>
+            )}
           </div>
           {tab === "watched" && (
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">Watched {watchedDate(movie.watchedAt)}</p>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {canMarkWatched &&
-              (tab === "watched" ? (
-                <UnmarkWatchedButton movieId={movie.id} />
-              ) : (
-                <MarkWatchedControl movieId={movie.id} today={today} />
-              ))}
-          </div>
-          {/* Read-only badge only — favoriting happens on the movie page, and only for watched movies. */}
-          {tab === "watched" && movie.isFavorite && (
-            <span className="text-xl leading-none text-[var(--color-behind)]">♥</span>
-          )}
+        <div className="flex items-center gap-2">
+          {canMarkWatched &&
+            (tab === "watched" ? (
+              <UnmarkWatchedButton movieId={movie.id} />
+            ) : (
+              <MarkWatchedControl movieId={movie.id} today={today} />
+            ))}
         </div>
       </div>
     </li>

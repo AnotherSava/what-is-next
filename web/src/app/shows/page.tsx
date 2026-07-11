@@ -86,20 +86,18 @@ function ShowCard({ show, plexServerId }: { show: ShowSummary; plexServerId: str
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <PosterPlay path={show.posterPath} alt={show.title} width={64} height={96} size="w185" watchUrl={watchUrl} />
-      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
-        <div className="min-w-0">
-          <Link href={`/shows/${show.id}`} className="block truncate font-medium hover:underline">
+      <div className="min-w-0 flex-1 py-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <Link href={`/shows/${show.id}`} className="min-w-0 truncate font-medium hover:underline">
             {show.title}
           </Link>
-          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-            <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
-            {show.status ? ` · ${show.status}` : ""}
-          </p>
-        </div>
-        <div className="flex items-center justify-end">
           {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
-          {show.isFavorite && <span className="text-xl leading-none text-[var(--color-behind)]">♥</span>}
+          {show.isFavorite && <span className="shrink-0 text-xl leading-none text-[var(--color-behind)]">♥</span>}
         </div>
+        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+          <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
+          {show.status ? ` · ${show.status}` : ""}
+        </p>
       </div>
     </li>
   );

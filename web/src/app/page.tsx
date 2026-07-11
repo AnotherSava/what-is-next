@@ -110,9 +110,11 @@ function BehindRow({
         </p>
         <p className="min-h-5 truncate text-sm text-[var(--color-muted)]">{show.nextUp.title}</p>
       </div>
-      {(show.lastWatchedAt || show.unwatchedAiredCount > 1) && (
-        // Mirror the left column's 3 lines: last-watched on top, "+N more" on the bottom, empty middle.
+      {(show.isFavorite || show.lastWatchedAt || show.unwatchedAiredCount > 1) && (
+        // Mirror the left column's 3 lines: favorite ♥ on top, last-watched in the middle, "+N more" on the bottom.
         <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">
+          {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
+          <span className="text-xl leading-none text-[var(--color-behind)]">{show.isFavorite ? "♥" : ""}</span>
           <span>
             {show.lastWatchedAt && (
               <span title={`Last watched ${displayDate(show.lastWatchedAt)}`}>

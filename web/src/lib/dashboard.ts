@@ -9,6 +9,7 @@ export interface BehindShow {
   showId: string;
   title: string;
   posterPath: string | null;
+  isFavorite: boolean;
   unwatchedAiredCount: number;
   inPlex: boolean; // in the user's Plex library → can be played right now
   plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (when inPlex)
@@ -54,6 +55,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       showId: s.id,
       title: s.title,
       posterPath: s.posterPath,
+      isFavorite: s.isFavorite,
       unwatchedAiredCount: s.progress.unwatchedAiredCount,
       inPlex: s.inPlex,
       plexRatingKey: s.plexRatingKey,
