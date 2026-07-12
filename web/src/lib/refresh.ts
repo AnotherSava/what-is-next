@@ -9,7 +9,9 @@ import { getTvdb, hydrateMovieByTvdbId, hydrateShowByTvdbId, isTvdbConfigured } 
 // Nightly metadata refresh (brief §7). Re-fetches catalog rows from TMDB and NEVER touches user-state tables.
 //   • TV: status not Ended/Canceled, OR lastRefreshedAt older than 30 days (so ended shows still get an
 //     occasional re-check for finale corrections).
-//   • Movies: releaseDate null or in the future (nothing changes about a released movie).
+//   • Movies: releaseDate null or in the future, OR lastRefreshedAt older than 7 days. A released movie's
+//     metadata is stable, but its TMDB/IMDb ratings drift as votes accumulate, so re-check it weekly — a shorter
+//     window than TV's, since a movie has no other refresh trigger (airing shows already refresh every night).
 // Logs a one-line summary into Setting `refresh:lastRun` for the admin page. The manual "Refresh now" buttons
 // call the same code path.
 
@@ -35,7 +37,8 @@ export interface RefreshProgress {
   current: string | null; // title of the item currently being fetched, or null between/after items
 }
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000; // TV ended-show re-check window
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000; // released-movie rating re-check window (see the movies note above)
 
 // `onProgress`, when given (manual runs), is called once up front with the totals and then after every processed
 // item, so the admin UI can stream a determinate progress bar. The nightly cron omits it and behaves as before.
@@ -61,10 +64,15 @@ export async function refreshAll(
 
   const movieItems = await prisma.mediaItem.findMany({
     where: { mediaType: "movie", tmdbId: { not: null } },
-    select: { tmdbId: true, releaseDate: true, title: true },
+    select: { tmdbId: true, releaseDate: true, lastRefreshedAt: true, title: true },
   });
-  // A released movie's metadata is stable — only refresh unreleased/undated ones.
-  const movieWork = movieItems.filter((it) => !(it.releaseDate != null && it.releaseDate.slice(0, 10) <= today));
+  // Unreleased/undated movies always refresh; a released movie's metadata is stable, but its TMDB/IMDb ratings
+  // drift, so re-check it once it's older than the weekly staleness window (shorter than TV's — see note above).
+  const movieWork = movieItems.filter((it) => {
+    const released = it.releaseDate != null && it.releaseDate.slice(0, 10) <= today;
+    const stale = !it.lastRefreshedAt || nowMs - it.lastRefreshedAt.getTime() > SEVEN_DAYS_MS;
+    return !released || stale;
+  });
 
   // TVDB fallback: rows TMDB can't resolve (tmdbId null, tvdbId set) — the import stubs and any titles already
   // adopted from TVDB. Skipped entirely when TVDB isn't configured. Kept small (a handful of titles).
