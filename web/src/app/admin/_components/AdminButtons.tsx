@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
-import { backupNow, setManualWatched } from "../actions";
+import { backupNow, setManualWatched, setMovieRatings } from "../actions";
 import { ACTION_BUTTON_CLASS } from "./buttonStyle";
 
 // Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
@@ -136,6 +136,41 @@ export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
       />
       <span>Enable manual watched toggle</span>
     </label>
+  );
+}
+
+// Owner toggles for which rating sources appear on movie cards. Both checkboxes share one setting object, so each
+// change persists the full { tmdb, imdb } pair; local state gives instant feedback and the action revalidates /movies.
+export function MovieRatingsToggles({ tmdb, imdb }: { tmdb: boolean; imdb: boolean }) {
+  const [state, setState] = useState({ tmdb, imdb });
+  const [pending, start] = useTransition();
+  function update(next: { tmdb: boolean; imdb: boolean }) {
+    setState(next);
+    start(() => setMovieRatings(next));
+  }
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-2">
+      <label className="flex cursor-pointer items-center gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={state.tmdb}
+          disabled={pending}
+          onChange={(e) => update({ ...state, tmdb: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
+        />
+        <span>Show TMDB rating</span>
+      </label>
+      <label className="flex cursor-pointer items-center gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={state.imdb}
+          disabled={pending}
+          onChange={(e) => update({ ...state, imdb: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
+        />
+        <span>Show IMDb rating</span>
+      </label>
+    </div>
   );
 }
 

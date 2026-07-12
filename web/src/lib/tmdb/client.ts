@@ -77,7 +77,7 @@ export class TmdbClient {
     return this.request(`/tv/${id}/season/${seasonNumber}`, {}, tmdbSeasonDetailSchema);
   }
   getMovieDetail(id: number): Promise<TmdbMovieDetail> {
-    return this.request(`/movie/${id}`, { append_to_response: "external_ids" }, tmdbMovieDetailSchema);
+    return this.request(`/movie/${id}`, { append_to_response: "external_ids,credits" }, tmdbMovieDetailSchema);
   }
   searchTv(query: string, page = 1) {
     return this.request(`/search/tv`, { query, page, include_adult: "false" }, tmdbTvSearchSchema);

@@ -7,6 +7,7 @@ A personal, self-hosted tracker for TV series and movies — what I've watched, 
 - **Shows** grouped Behind / Up to date / Planned / Finished / Stopped, with per-episode checklists.
 - **Movies** watched + watchlist, mark-watched with a date.
 - **Search** TMDB and add titles; details hydrate in the background.
+- **Ratings & director** on movie and show cards: TMDB and IMDb scores (IMDb via OMDb) plus the director, with per-source show/hide toggles in Admin.
 - **Lists** for manual curation.
 - **Plex** library sync: badges the shows/seasons you have in Plex, an "In Plex" filter, continuous import of your Plex watch history, and a review-then-add flow for Plex-only titles. In-app "unwatch" is durable — a later sync won't re-add it. While you browse, watch state auto-refreshes from Plex, and a dot beside _Admin_ shows how current it is.
 - **Recently watched** feed: your watch history across sources (TV Time / Plex / app), newest first.
@@ -62,6 +63,7 @@ The SQLite database and nightly backups live on the `data` volume at `/data` (`D
 | `ADMIN_PASSWORD`        | yes      | —                        | owner login password                                                                             |
 | `SESSION_SECRET`        | yes      | —                        | signs the owner session cookie — `node -e "console.log(crypto.randomBytes(32).toString('hex'))"` |
 | `TMDB_API_TOKEN`        | yes      | —                        | TMDB v4 Read Access Token (Bearer)                                                               |
+| `OMDB_API_KEY`          | no       | —                        | OMDb API key; adds IMDb ratings alongside TMDB on cards (degrades to TMDB-only when unset)       |
 | `PUBLIC_ACCESS`         | no       | `readonly`               | `off` makes the whole site owner-only                                                            |
 | `REFRESH_CRON`          | no       | `0 11 * * *`             | nightly refresh + backup schedule (UTC)                                                          |
 | `TZ`                    | no       | host                     | timezone for "has it aired" / "this week"                                                        |
@@ -76,6 +78,6 @@ The SQLite database and nightly backups live on the `data` volume at `/data` (`D
 
 - **Nightly job** (registered in `src/instrumentation.ts`): refreshes TMDB metadata for still-airing shows and future/undated movies, backs up the SQLite file to `/data/backups` (14-day retention), and — when Plex is configured — refreshes the Plex presence badges and imports new watch history. Trigger the refresh manually — globally or per-show — from `/admin`.
 - **Plex** (when `PLEX_TOKEN` is set): run a sync and review/add Plex-only titles from `/admin`. Every sync (nightly + manual) refreshes presence and imports your Plex watch history. It also flags items in Plex it can't identify (no external id) so you can fix the match on the Plex side. The owner's browsing also triggers a throttled sync (at most once per `PLEX_VIEW_TTL_SECONDS`), so what you're looking at stays current without waiting for the nightly job; the freshness dot next to _Admin_ turns yellow/red as it ages. Adding _new titles_ to tracking is always a manual, reviewed action.
-- **Settings** (`/admin`): the manual "mark watched" controls are off by default — watch state comes from the Plex sync — and a checkbox re-enables them. You can also configure **download search links**: per-source URL templates (stored in the database, never in the repo) that add a search link to each movie and show in the Download view.
+- **Settings** (`/admin`): the manual "mark watched" controls are off by default — watch state comes from the Plex sync — and a checkbox re-enables them. You can also configure **download search links**: per-source URL templates (stored in the database, never in the repo) that add a search link to each movie and show in the Download view. A **Ratings** setting independently toggles the TMDB and IMDb scores shown on movie and show cards.
 - **TVDB fallback** (when `TVDB_API_KEY` is set): the refresh also hydrates catalog rows TMDB can't resolve (fan/web titles the import left as bare stubs) from TheTVDB, keyed by their TVDB id. `/admin` shows how many such titles remain.
 - **Backups** are consistent online SQLite snapshots; copy them off the volume periodically.

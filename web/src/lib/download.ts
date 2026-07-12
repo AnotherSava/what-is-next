@@ -12,20 +12,16 @@ import { getFollowedShows } from "@/lib/shows";
 // getPlexEpisodePresence), so a show you already partly own still surfaces here when a newer aired episode isn't
 // downloaded — which season-level presence can't tell apart. Explicit userId (brief §5a rule 1).
 
-export interface DownloadEpisode {
-  seasonNumber: number;
-  episodeNumber: number;
-  title: string | null;
-}
-
 export interface DownloadShow {
   showId: string;
   title: string;
   posterPath: string | null;
   isFavorite: boolean;
+  tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
+  imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
   missingCount: number; // aired, unwatched episodes not in Plex — the ones to grab
   lastWatchedAt: Date | null; // most recent watch (started shows); null when not started or all watches undated
-  nextDownload: DownloadEpisode; // earliest missing episode — the one to grab next
+  missingSeasons: number[]; // seasons (numbers, sorted) with ≥1 aired episode not in Plex yet — the ones to download
 }
 
 // A tracked movie you'd need to acquire — on your watchlist (unwatched) but not in your Plex library. The movie
@@ -35,6 +31,9 @@ export interface DownloadMovie {
   title: string;
   posterPath: string | null;
   releaseDate: string | null; // ISO date; only its year is rendered
+  tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
+  imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  director: string | null; // director(s), comma-joined — rendered under the title
 }
 
 // The show side of the Download view — the three buckets classifyDownloads produces (kept separate so that pure
@@ -95,7 +94,15 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
   // watchlist order (most recently added first).
   const movies: DownloadMovie[] = moviesView.watchlist
     .filter((m) => !m.inPlex && hasAired(m.releaseDate, today))
-    .map((m) => ({ movieId: m.id, title: m.title, posterPath: m.posterPath, releaseDate: m.releaseDate }));
+    .map((m) => ({
+      movieId: m.id,
+      title: m.title,
+      posterPath: m.posterPath,
+      releaseDate: m.releaseDate,
+      tmdbRating: m.tmdbRating,
+      imdbRating: m.imdbRating,
+      director: m.director,
+    }));
 
   const started = shows.filter((s) => s.group === "behind");
   const notStarted = shows.filter((s) => s.group === "planned");
@@ -150,20 +157,20 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
     const watched = watchedByShow.get(s.id) ?? new Set<string>();
     const missing = missingFromPlex(eps, watched, presentIds, today);
     if (missing.length === 0) return null; // behind/planned, but everything aired is already in Plex
-    const next = missing[0];
     const ms = lastWatchMs.get(s.id);
+    // Seasons with ≥1 aired episode not in Plex yet (the ones to download) — rendered as a range on the show's
+    // download row. Derived from the same `missing` set, so it never lists a season you already fully have in Plex.
+    const missingSeasons = [...new Set(missing.map((e) => e.seasonNumber))].sort((a, b) => a - b);
     const row: DownloadShow = {
       showId: s.id,
       title: s.title,
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,
+      tmdbRating: s.tmdbRating,
+      imdbRating: s.imdbRating,
       missingCount: missing.length,
       lastWatchedAt: ms != null ? new Date(ms) : null,
-      nextDownload: {
-        seasonNumber: next.seasonNumber,
-        episodeNumber: next.episodeNumber,
-        title: next.title,
-      },
+      missingSeasons,
     };
     return { row, inPlexLeft: unwatchedInPlexCount(eps, watched, presentIds, today) };
   };

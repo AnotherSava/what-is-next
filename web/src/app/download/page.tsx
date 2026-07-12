@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EmptyColumn } from "@/app/_components/EmptyColumn";
+import { MovieDirectorLine, MovieRatingLine, MovieTitleLink } from "@/app/_components/MovieText";
 import { Poster } from "@/app/_components/Poster";
 import { Section } from "@/app/_components/Section";
 import { displayDate, nowMs } from "@/lib/datetime";
 import { getDownloads, type DownloadMovie, type DownloadShow } from "@/lib/download";
 import { downloadLinksFor, type DownloadLink, type DownloadSource } from "@/lib/downloadSources";
-import { formatInterval } from "@/lib/format";
+import { formatInterval, formatSeasonRange } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getDisplayedUser } from "@/lib/session";
-import { getDownloadSources } from "@/lib/settings";
+import { getDownloadSources, getMovieRatingsVisibility } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Download" };
 
@@ -20,9 +21,10 @@ export const metadata: Metadata = { title: "Download" };
 // downloaded. Renders for the displayed user; it's a read-only view (nothing here is in Plex to play or mark).
 export default async function DownloadPage() {
   const displayedUser = await getDisplayedUser();
-  const [{ movies, getBack, moreOf, notStarted }, sources] = await Promise.all([
+  const [{ movies, getBack, moreOf, notStarted }, sources, ratingsVisibility] = await Promise.all([
     getDownloads(displayedUser.id),
     getDownloadSources(),
+    getMovieRatingsVisibility(),
   ]);
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
   const showsEmpty = getBack.length === 0 && moreOf.length === 0 && notStarted.length === 0;
@@ -45,7 +47,13 @@ export default async function DownloadPage() {
             {movies.length > 0 ? (
               <ul className="space-y-2">
                 {movies.map((m) => (
-                  <MovieRow key={m.movieId} movie={m} sources={sources} />
+                  <MovieRow
+                    key={m.movieId}
+                    movie={m}
+                    sources={sources}
+                    showTmdb={ratingsVisibility.tmdb}
+                    showImdb={ratingsVisibility.imdb}
+                  />
                 ))}
               </ul>
             ) : (
@@ -65,7 +73,16 @@ export default async function DownloadPage() {
                   <Section title="Get back" count={getBack.length}>
                     <ul className="space-y-2">
                       {getBack.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} showAge />
+                        <DownloadRow
+                          key={s.showId}
+                          show={s}
+                          now={now}
+                          sources={sources}
+                          showAge
+                          seasons={s.missingSeasons}
+                          showTmdb={ratingsVisibility.tmdb}
+                          showImdb={ratingsVisibility.imdb}
+                        />
                       ))}
                     </ul>
                   </Section>
@@ -75,7 +92,16 @@ export default async function DownloadPage() {
                   <Section title="More of" count={moreOf.length}>
                     <ul className="space-y-2">
                       {moreOf.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} showAge />
+                        <DownloadRow
+                          key={s.showId}
+                          show={s}
+                          now={now}
+                          sources={sources}
+                          showAge
+                          seasons={s.missingSeasons}
+                          showTmdb={ratingsVisibility.tmdb}
+                          showImdb={ratingsVisibility.imdb}
+                        />
                       ))}
                     </ul>
                   </Section>
@@ -85,7 +111,14 @@ export default async function DownloadPage() {
                   <Section title="Not started" count={notStarted.length}>
                     <ul className="space-y-2">
                       {notStarted.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} />
+                        <DownloadRow
+                          key={s.showId}
+                          show={s}
+                          now={now}
+                          sources={sources}
+                          showTmdb={ratingsVisibility.tmdb}
+                          showImdb={ratingsVisibility.imdb}
+                        />
                       ))}
                     </ul>
                   </Section>
@@ -99,24 +132,36 @@ export default async function DownloadPage() {
   );
 }
 
-function episodeLabel(seasonNumber: number, episodeNumber: number): string {
-  return `Season ${seasonNumber}, Episode ${episodeNumber}`;
-}
-
-function MovieRow({ movie, sources }: { movie: DownloadMovie; sources: DownloadSource[] }) {
+function MovieRow({
+  movie,
+  sources,
+  showTmdb,
+  showImdb,
+}: {
+  movie: DownloadMovie;
+  sources: DownloadSource[];
+  showTmdb: boolean;
+  showImdb: boolean;
+}) {
   // No play button — the movie isn't in Plex; the poster links to the movie page instead (mirrors DownloadRow).
-  const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
   const links = downloadLinksFor(sources, "movies", movie.title);
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+    <li className="flex items-stretch gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/movies/${movie.movieId}`} className="shrink-0 leading-none" aria-label={movie.title}>
         <Poster path={movie.posterPath} alt={movie.title} width={48} height={72} size="w185" />
       </Link>
-      <div className="min-w-0 flex-1">
-        <Link href={`/movies/${movie.movieId}`} className="block truncate text-lg font-medium hover:underline">
-          {movie.title}
-        </Link>
-        {year && <p className="truncate text-sm text-[var(--color-muted)]">{year}</p>}
+      {/* Title + director pinned to the top, ratings to the bottom (matches the /movies card). */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+        <div className="min-w-0">
+          <MovieTitleLink movieId={movie.movieId} title={movie.title} releaseDate={movie.releaseDate} />
+          <MovieDirectorLine director={movie.director} />
+        </div>
+        <MovieRatingLine
+          tmdbRating={movie.tmdbRating}
+          imdbRating={movie.imdbRating}
+          showTmdb={showTmdb}
+          showImdb={showImdb}
+        />
       </div>
       <SourceLinks links={links} />
     </li>
@@ -149,11 +194,17 @@ function DownloadRow({
   now,
   sources,
   showAge = false,
+  seasons,
+  showTmdb,
+  showImdb,
 }: {
   show: DownloadShow;
   now: number;
   sources: DownloadSource[];
   showAge?: boolean;
+  seasons?: number[]; // the seasons-to-download range (Get back / More of); absent for not-started shows (title only)
+  showTmdb: boolean;
+  showImdb: boolean;
 }) {
   const age = showAge && show.lastWatchedAt;
   const links = downloadLinksFor(sources, "shows", show.title);
@@ -163,18 +214,26 @@ function DownloadRow({
       <Link href={`/shows/${show.showId}`} className="shrink-0 leading-none" aria-label={show.title}>
         <Poster path={show.posterPath} alt={show.title} width={48} height={72} size="w185" />
       </Link>
-      <div className="min-w-0 flex-1">
-        <Link href={`/shows/${show.showId}`} className="block truncate text-lg font-medium hover:underline">
-          {show.title}
-        </Link>
-        <p className="truncate text-sm text-[var(--color-accent)]">
-          {episodeLabel(show.nextDownload.seasonNumber, show.nextDownload.episodeNumber)}
-        </p>
-        <p className="min-h-5 truncate text-sm text-[var(--color-muted)]">{show.nextDownload.title}</p>
+      {/* Title + season/episode pinned to the top, ratings to the bottom (matches the movie card). */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between self-stretch py-0.5">
+        <div className="min-w-0">
+          <Link href={`/shows/${show.showId}`} className="block truncate font-medium hover:underline">
+            {show.title}
+          </Link>
+          {seasons && seasons.length > 0 && (
+            <p className="truncate text-sm text-[var(--color-accent)]">{formatSeasonRange(seasons)}</p>
+          )}
+        </div>
+        <MovieRatingLine
+          tmdbRating={show.tmdbRating}
+          imdbRating={show.imdbRating}
+          showTmdb={showTmdb}
+          showImdb={showImdb}
+        />
       </div>
       <SourceLinks links={links} />
       {(show.isFavorite || age || show.missingCount > 1) && (
-        // Mirror the left column's 3 lines: favorite ♥ on top, last-watched in the middle, "+N more" on the bottom.
+        // Spread down the card height: favorite ♥ on top, last-watched in the middle, "+N more" on the bottom.
         <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">
           <span className="text-xl leading-none text-[var(--color-behind)]">{show.isFavorite ? "♥" : ""}</span>
           <span>

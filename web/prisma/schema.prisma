@@ -45,6 +45,8 @@ model MediaItem {
   backdropPath  String?
   genres        String? // JSON string[] + zod (printlab convention)
   tmdbRating    Float?
+  imdbRating    Float? // IMDb community score (0–10), fetched from OMDb by imdbId. Null when unresolved/unfetched.
+  director      String? // movie director(s) from TMDB credits, comma-joined; null for TV / unresolved / unfetched.
 
   numberOfSeasons  Int? // denormalized for list views; recomputed on refresh
   numberOfEpisodes Int?

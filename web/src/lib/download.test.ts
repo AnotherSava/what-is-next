@@ -77,9 +77,11 @@ describe("classifyDownloads", () => {
     title,
     posterPath: null,
     isFavorite: false,
+    tmdbRating: null,
+    imdbRating: null,
     missingCount,
     lastWatchedAt: lastWatchedAt ? new Date(lastWatchedAt) : null,
-    nextDownload: { seasonNumber: 1, episodeNumber: 1, title },
+    missingSeasons: [],
   });
   const analyzed = (title: string, lastWatchedAt: string | null, inPlexLeft: number) => ({
     row: row(title, lastWatchedAt),

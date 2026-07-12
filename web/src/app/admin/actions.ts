@@ -34,6 +34,15 @@ export async function setManualWatched(enabled: boolean): Promise<void> {
   for (const p of ["/admin", "/", "/shows", "/movies"]) revalidatePath(p);
 }
 
+// Set which rating sources (TMDB / IMDb) appear on movie AND show cards. Both flags are stored together so the
+// setting is always complete regardless of which checkbox changed. (The setting key keeps its legacy
+// "movieRatings" name — it governs every card now; renaming it would orphan the stored value.)
+export async function setMovieRatings(visibility: { tmdb: boolean; imdb: boolean }): Promise<void> {
+  await requireOwner();
+  await setSetting("settings:movieRatings", visibility);
+  for (const p of ["/admin", "/movies", "/", "/download", "/shows"]) revalidatePath(p);
+}
+
 // Replace the Download view's list of download-source links. Stored in the DB, not the repo, so the sources stay
 // out of version control. Blank rows (no template) are dropped and text is trimmed; the Download page re-reads the
 // list to render each card's chips.

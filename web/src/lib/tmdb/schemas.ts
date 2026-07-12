@@ -48,6 +48,11 @@ const tmdbExternalIdsSchema = z.object({
   tvdb_id: z.number().int().nullish(),
 });
 
+// Credits (append_to_response=credits) — we only read the crew to pick out the director(s).
+const tmdbCreditsSchema = z.object({
+  crew: z.array(z.object({ job: z.string().nullish(), name: z.string().nullish() })).nullish(),
+});
+
 // A season stub inside a show detail response (no episodes here — those come from /tv/{id}/season/{n}).
 const tmdbSeasonStubSchema = z.object({
   id: z.number().int().nullish(),
@@ -103,7 +108,7 @@ export const tmdbSeasonDetailSchema = z.object({
 });
 export type TmdbSeasonDetail = z.infer<typeof tmdbSeasonDetailSchema>;
 
-// GET /3/movie/{id}?append_to_response=external_ids
+// GET /3/movie/{id}?append_to_response=external_ids,credits
 export const tmdbMovieDetailSchema = z.object({
   id: z.number().int(),
   title: z.string(),
@@ -117,6 +122,7 @@ export const tmdbMovieDetailSchema = z.object({
   vote_average: z.number().nullish(),
   genres: z.array(tmdbGenreSchema).nullish(),
   external_ids: tmdbExternalIdsSchema.nullish(),
+  credits: tmdbCreditsSchema.nullish(),
 });
 export type TmdbMovieDetail = z.infer<typeof tmdbMovieDetailSchema>;
 

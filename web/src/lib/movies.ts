@@ -12,6 +12,9 @@ export interface MovieSummary {
   posterPath: string | null;
   releaseDate: string | null;
   tmdbId: number | null;
+  tmdbRating: number | null; // TMDB community score (0–10)
+  imdbRating: number | null; // IMDb community score (0–10), fetched from OMDb; null when unresolved
+  director: string | null; // director(s), comma-joined; null when unresolved
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null;
@@ -60,6 +63,9 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       posterPath: st.mediaItem.posterPath,
       releaseDate: st.mediaItem.releaseDate,
       tmdbId: st.mediaItem.tmdbId,
+      tmdbRating: st.mediaItem.tmdbRating,
+      imdbRating: st.mediaItem.imdbRating,
+      director: st.mediaItem.director,
       isFavorite: st.isFavorite,
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,
@@ -98,7 +104,10 @@ export async function getMovieDetail(userId: string, movieId: string): Promise<M
 
   const [state, seen, plexMovies] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: movieId } } }),
-    prisma.seenEvent.findMany({ where: { userId, mediaItemId: movieId, episodeId: null }, select: { watchedAt: true } }),
+    prisma.seenEvent.findMany({
+      where: { userId, mediaItemId: movieId, episodeId: null },
+      select: { watchedAt: true },
+    }),
     isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
   ]);
 

@@ -4,10 +4,15 @@ import { getPrisma } from "@/lib/db";
 import { plural, seconds } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
-import { getDownloadSources, getSetting, isManualWatchedEnabled } from "@/lib/settings";
+import { getDownloadSources, getMovieRatingsVisibility, getSetting, isManualWatchedEnabled } from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
 import { addSelectedPlexItems } from "./actions";
-import { BackupNowButton, ManualWatchedToggle, RefreshNowButton } from "./_components/AdminButtons";
+import {
+  BackupNowButton,
+  ManualWatchedToggle,
+  MovieRatingsToggles,
+  RefreshNowButton,
+} from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
 import { DownloadSourcesEditor } from "./_components/DownloadSources";
 import { SyncPlexButton } from "./_components/SyncButton";
@@ -52,17 +57,27 @@ export default async function AdminPage() {
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const plexOn = isPlexConfigured();
-  const [refresh, backup, plexSync, plexCandidates, plexUnaccounted, tvdbStubs, manualWatched, downloadSources] =
-    await Promise.all([
-      getSetting("refresh:lastRun"),
-      getSetting("backup:lastRun"),
-      plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
-      plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
-      plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
-      getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
-      isManualWatchedEnabled(),
-      getDownloadSources(),
-    ]);
+  const [
+    refresh,
+    backup,
+    plexSync,
+    plexCandidates,
+    plexUnaccounted,
+    tvdbStubs,
+    manualWatched,
+    movieRatings,
+    downloadSources,
+  ] = await Promise.all([
+    getSetting("refresh:lastRun"),
+    getSetting("backup:lastRun"),
+    plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
+    plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
+    plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
+    getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
+    isManualWatchedEnabled(),
+    getMovieRatingsVisibility(),
+    getDownloadSources(),
+  ]);
   const stale = (iso: string): boolean => nowMs - new Date(iso).getTime() > FRESH_WINDOW_MS;
 
   // ── Refresh (incl. TVDB-fallback completeness) ────────────────────────────
@@ -246,6 +261,14 @@ export default async function AdminPage() {
           Off by default — watch state comes from the Plex sync. Turn on to show manual mark-watched controls on the
           home, show, and movie pages.
         </p>
+
+        <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
+          <h3 className="text-sm font-medium">Ratings</h3>
+          <p className="text-sm text-[var(--color-muted)]">
+            Which rating sources appear on movie and show cards. Both on by default; uncheck one to hide it.
+          </p>
+          <MovieRatingsToggles tmdb={movieRatings.tmdb} imdb={movieRatings.imdb} />
+        </div>
 
         <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
           <h3 className="text-sm font-medium">Download search links</h3>

@@ -14,6 +14,9 @@ export interface ReadyMovie {
   title: string;
   posterPath: string | null;
   releaseDate: string | null; // ISO date; only its year is rendered
+  tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
+  imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  director: string | null; // director(s), comma-joined — rendered under the title
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
@@ -22,6 +25,8 @@ export interface BehindShow {
   title: string;
   posterPath: string | null;
   isFavorite: boolean;
+  tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
+  imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
   unwatchedAiredCount: number;
   nextUpInPlex: boolean; // the NEXT-UP episode is in the user's Plex library → can be played right now
   plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (set when the show is in Plex)
@@ -42,7 +47,16 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
   // order (most recently added first).
   const readyMovies: ReadyMovie[] = movies.watchlist
     .filter((m) => m.inPlex)
-    .map((m) => ({ movieId: m.id, title: m.title, posterPath: m.posterPath, releaseDate: m.releaseDate, plexRatingKey: m.plexRatingKey }));
+    .map((m) => ({
+      movieId: m.id,
+      title: m.title,
+      posterPath: m.posterPath,
+      releaseDate: m.releaseDate,
+      tmdbRating: m.tmdbRating,
+      imdbRating: m.imdbRating,
+      director: m.director,
+      plexRatingKey: m.plexRatingKey,
+    }));
 
   const behindShows = shows.filter((s) => s.group === "behind" && s.progress.nextUp);
   // Enrich each next-up episode with its title (progress.ts stays title-agnostic), and load the most-recent
@@ -76,6 +90,8 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       title: s.title,
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,
+      tmdbRating: s.tmdbRating,
+      imdbRating: s.imdbRating,
       unwatchedAiredCount: s.progress.unwatchedAiredCount,
       nextUpInPlex: plexEpisodeIds.has(n.id),
       plexRatingKey: s.plexRatingKey,

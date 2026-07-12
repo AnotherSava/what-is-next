@@ -22,6 +22,8 @@ export interface ShowSummary {
   posterPath: string | null;
   status: string | null;
   isFavorite: boolean;
+  tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
+  imdbRating: number | null; // IMDb community score (0–10), fetched from OMDb; null when unresolved
   progress: ShowProgress;
   group: DisplayGroup;
   inPlex: boolean;
@@ -76,6 +78,8 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         posterPath: st.mediaItem.posterPath,
         status: st.mediaItem.status,
         isFavorite: st.isFavorite,
+        tmdbRating: st.mediaItem.tmdbRating,
+        imdbRating: st.mediaItem.imdbRating,
         progress,
         // A favorite is a strong "keep this around", so it's never hidden — a favorited off-list show shows as Planned.
         group: group === "off-list" && st.isFavorite ? "planned" : group,

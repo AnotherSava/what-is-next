@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatInterval, plural, seconds } from "./format";
+import { formatInterval, formatSeasonRange, plural, seconds } from "./format";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -45,5 +45,25 @@ describe("plural", () => {
 describe("seconds", () => {
   it("renders whole-tenths of a second", () => {
     expect(seconds(3200)).toBe("3.2s");
+  });
+});
+
+describe("formatSeasonRange", () => {
+  it("collapses a contiguous run to A-B and pluralizes", () => {
+    expect(formatSeasonRange([2, 3, 4])).toBe("Seasons 2-4");
+  });
+
+  it("uses the singular noun for a single season", () => {
+    expect(formatSeasonRange([2])).toBe("Season 2");
+  });
+
+  it("keeps non-contiguous seasons as a comma list with inner ranges", () => {
+    expect(formatSeasonRange([1, 3, 4, 5])).toBe("Seasons 1, 3-5");
+    expect(formatSeasonRange([1, 3, 5])).toBe("Seasons 1, 3, 5");
+  });
+
+  it("dedupes and sorts unordered input, and returns '' for empty", () => {
+    expect(formatSeasonRange([4, 2, 3, 2])).toBe("Seasons 2-4");
+    expect(formatSeasonRange([])).toBe("");
   });
 });

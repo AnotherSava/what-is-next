@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import { getOmdb, isOmdbConfigured } from "@/lib/omdb";
 import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
 
 // Which external API a catalog row is hydrated from. Drives where external ids are written (tmdbId vs tvdbId)
@@ -8,6 +9,19 @@ export type MetadataSource = "tmdb" | "tvdb";
 // Shared TMDB → catalog upsert. CATALOG ROWS ONLY (MediaItem/Season/Episode) — it never touches user state, so
 // search-add and the nightly refresh both reuse it without risk (global rule: single source of logic). Both key
 // MediaItem by tmdbId, and the shared season/episode upsert (upsertCatalogSeason) is identical for both.
+
+// Best-effort IMDb rating for catalog hydration: null when OMDb isn't configured, the item has no imdb id, or the
+// lookup fails. Hydration must never fail because the (optional) rating source is down — the IMDb score is a nice-
+// to-have on top of the TMDB-sourced catalog. Only a real value is ever returned, so callers skip writing null and
+// keep any previously stored rating.
+async function fetchImdbRatingBestEffort(imdbId: string | null | undefined): Promise<number | null> {
+  if (!imdbId || !isOmdbConfigured()) return null;
+  try {
+    return await getOmdb().getImdbRating(imdbId);
+  } catch {
+    return null;
+  }
+}
 
 // Catalog fields derived purely from a TMDB show detail (external ids included). Callers add mediaType and may
 // override tvdbId (an already-set authoritative tvdbId is preserved over TMDB's external id).
@@ -46,7 +60,19 @@ export function movieDetailToMediaData(detail: TmdbMovieDetail) {
     backdropPath: detail.backdrop_path ?? null,
     genres: detail.genres?.length ? JSON.stringify(detail.genres.map((g) => g.name)) : null,
     tmdbRating: detail.vote_average ?? null,
+    director: directorFrom(detail),
   };
+}
+
+// The movie's director(s) from TMDB credits, comma-joined (a film can be co-directed — e.g. the Coens), or null
+// when credits weren't returned or list no director.
+function directorFrom(detail: TmdbMovieDetail): string | null {
+  const names = (detail.credits?.crew ?? [])
+    .filter((c) => c.job === "Director")
+    .map((c) => c.name)
+    .filter((n): n is string => !!n);
+  const unique = [...new Set(names)]; // TMDB's community-edited crew can list the same person twice — de-dup
+  return unique.length ? unique.join(", ") : null;
 }
 
 // Upsert one season and all its episodes. The external id (season.id / ep.id) is written to the column that
@@ -139,10 +165,13 @@ export async function hydrateShowByTmdbId(
     select: { tvdbId: true },
   });
   const md = tvDetailToMediaData(detail);
+  const imdbRating = await fetchImdbRatingBestEffort(md.imdbId);
   // Preserve an authoritative tvdbId (e.g. from the import); only adopt TMDB's external id when none is set.
   const data = {
     ...md,
     tvdbId: existing?.tvdbId ?? md.tvdbId,
+    // Only write a real rating — a null (OMDb down/unconfigured/no match) must not wipe a previously stored one.
+    ...(imdbRating != null ? { imdbRating } : {}),
     mediaType: "tv",
     metadataSource: "tmdb", // assert source so it can't drift (and self-heal a row previously adopted by TVDB)
     lastRefreshedAt: new Date(),
@@ -174,9 +203,12 @@ export async function hydrateMovieByTmdbId(
     select: { tvdbId: true },
   });
   const md = movieDetailToMediaData(detail);
+  const imdbRating = await fetchImdbRatingBestEffort(md.imdbId);
   const data = {
     ...md,
     tvdbId: existing?.tvdbId ?? md.tvdbId,
+    // Only write a real rating — a null (OMDb down/unconfigured/no match) must not wipe a previously stored one.
+    ...(imdbRating != null ? { imdbRating } : {}),
     mediaType: "movie",
     metadataSource: "tmdb", // assert source so it can't drift (and self-heal a row previously adopted by TVDB)
     lastRefreshedAt: new Date(),

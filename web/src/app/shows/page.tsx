@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MovieRatingLine } from "@/app/_components/MovieText";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
-import { getPlexServerId } from "@/lib/settings";
+import { getMovieRatingsVisibility, getPlexServerId } from "@/lib/settings";
 import { getDisplayedUser } from "@/lib/session";
 import { getFollowedShows, groupShows, groupSummary, SHOW_GROUP_ORDER, type ShowSummary } from "@/lib/shows";
 import type { VisibleGroup } from "@/lib/progress";
@@ -32,9 +33,10 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
   const plexOnly = plex === "1";
   const displayedUser = await getDisplayedUser();
   const plexEnabled = isPlexConfigured();
-  const [allShows, plexServerId] = await Promise.all([
+  const [allShows, plexServerId, ratingsVisibility] = await Promise.all([
     getFollowedShows(displayedUser.id),
     plexEnabled ? getPlexServerId() : Promise.resolve(null),
+    getMovieRatingsVisibility(),
   ]);
   const shows = plexOnly ? allShows.filter((s) => s.inPlex) : allShows;
   const groups = groupShows(shows);
@@ -70,7 +72,13 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
             </h2>
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {sortShows(groups[g]).map((show) => (
-                <ShowCard key={show.id} show={show} plexServerId={plexServerId} />
+                <ShowCard
+                  key={show.id}
+                  show={show}
+                  plexServerId={plexServerId}
+                  showTmdb={ratingsVisibility.tmdb}
+                  showImdb={ratingsVisibility.imdb}
+                />
               ))}
             </ul>
           </section>
@@ -80,24 +88,43 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function ShowCard({ show, plexServerId }: { show: ShowSummary; plexServerId: string | null }) {
+function ShowCard({
+  show,
+  plexServerId,
+  showTmdb,
+  showImdb,
+}: {
+  show: ShowSummary;
+  plexServerId: string | null;
+  showTmdb: boolean;
+  showImdb: boolean;
+}) {
   const summary = groupSummary(show.group, show.progress);
   const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <PosterPlay path={show.posterPath} alt={show.title} width={64} height={96} size="w185" watchUrl={watchUrl} />
-      <div className="min-w-0 flex-1 py-0.5">
-        <div className="flex items-center justify-between gap-2">
-          <Link href={`/shows/${show.id}`} className="min-w-0 truncate font-medium hover:underline">
-            {show.title}
-          </Link>
-          {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
-          {show.isFavorite && <span className="shrink-0 text-xl leading-none text-[var(--color-behind)]">♥</span>}
+      {/* Title + status pinned to the top, ratings to the bottom (matches the movie card). */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <Link href={`/shows/${show.id}`} className="min-w-0 truncate font-medium hover:underline">
+              {show.title}
+            </Link>
+            {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
+            {show.isFavorite && <span className="shrink-0 text-xl leading-none text-[var(--color-behind)]">♥</span>}
+          </div>
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+            <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
+            {show.status ? ` · ${show.status}` : ""}
+          </p>
         </div>
-        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-          <span className={summary.emphasize ? "text-[var(--color-behind)]" : undefined}>{summary.text}</span>
-          {show.status ? ` · ${show.status}` : ""}
-        </p>
+        <MovieRatingLine
+          tmdbRating={show.tmdbRating}
+          imdbRating={show.imdbRating}
+          showTmdb={showTmdb}
+          showImdb={showImdb}
+        />
       </div>
     </li>
   );

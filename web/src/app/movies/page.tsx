@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MovieDirectorLine, MovieRatingLine, MovieTitleLink } from "@/app/_components/MovieText";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { StopTrackingButton } from "@/app/_components/StopTrackingButton";
 import { displayDate, todayISO } from "@/lib/datetime";
 import { getMovies, type MovieSummary } from "@/lib/movies";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
+import { getMovieRatingsVisibility, getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { untrackMovie } from "./actions";
 import { MarkWatchedControl, UnmarkWatchedButton } from "./_components/MovieControls";
 
 export const metadata: Metadata = { title: "Movies" };
 
 type Tab = "watched" | "watchlist";
-
-function yearOf(releaseDate: string | null): string {
-  return releaseDate ? releaseDate.slice(0, 4) : "";
-}
 
 function watchedDate(d: Date | null): string {
   return d ? displayDate(d) : "date unknown";
@@ -27,10 +24,11 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
   const active: Tab = tab === "watchlist" ? "watchlist" : "watched";
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ watched, watchlist }, manualWatched, plexServerId] = await Promise.all([
+  const [{ watched, watchlist }, manualWatched, plexServerId, ratingsVisibility] = await Promise.all([
     getMovies(displayedUser.id),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
+    getMovieRatingsVisibility(),
   ]);
   const canMarkWatched = canEdit && manualWatched; // manual mark/unmark hidden unless the owner enabled it
   const today = todayISO();
@@ -60,6 +58,8 @@ export default async function MoviesPage({ searchParams }: { searchParams: Promi
               canMarkWatched={canMarkWatched}
               today={today}
               plexServerId={plexServerId}
+              showTmdb={ratingsVisibility.tmdb}
+              showImdb={ratingsVisibility.imdb}
             />
           ))}
         </ul>
@@ -91,6 +91,8 @@ function MovieCard({
   canMarkWatched,
   today,
   plexServerId,
+  showTmdb,
+  showImdb,
 }: {
   movie: MovieSummary;
   tab: Tab;
@@ -98,8 +100,9 @@ function MovieCard({
   canMarkWatched: boolean;
   today: string;
   plexServerId: string | null;
+  showTmdb: boolean;
+  showImdb: boolean;
 }) {
-  const year = yearOf(movie.releaseDate);
   const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
   return (
     <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
@@ -107,9 +110,7 @@ function MovieCard({
       <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className="min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <Link href={`/movies/${movie.id}`} className="min-w-0 truncate font-medium hover:underline">
-              {movie.title} {year && <span className="font-normal text-[var(--color-muted)]">({year})</span>}
-            </Link>
+            <MovieTitleLink movieId={movie.id} title={movie.title} releaseDate={movie.releaseDate} />
             {/* Untrack lives in the top-right corner, aligned with the title. Watchlist only. */}
             {canEdit && tab === "watchlist" && (
               <span className="shrink-0">
@@ -121,17 +122,29 @@ function MovieCard({
               <span className="shrink-0 text-xl leading-none text-[var(--color-behind)]">♥</span>
             )}
           </div>
+          <MovieDirectorLine director={movie.director} />
           {tab === "watched" && (
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">Watched {watchedDate(movie.watchedAt)}</p>
           )}
         </div>
+        {/* Bottom row of the card: the ratings line (left), with the owner-only mark/unmark controls pinned right
+            via ml-auto so they stay put even when there's no ratings line. */}
         <div className="flex items-center gap-2">
-          {canMarkWatched &&
-            (tab === "watched" ? (
-              <UnmarkWatchedButton movieId={movie.id} />
-            ) : (
-              <MarkWatchedControl movieId={movie.id} today={today} />
-            ))}
+          <MovieRatingLine
+            tmdbRating={movie.tmdbRating}
+            imdbRating={movie.imdbRating}
+            showTmdb={showTmdb}
+            showImdb={showImdb}
+          />
+          {canMarkWatched && (
+            <div className="ml-auto shrink-0">
+              {tab === "watched" ? (
+                <UnmarkWatchedButton movieId={movie.id} />
+              ) : (
+                <MarkWatchedControl movieId={movie.id} today={today} />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </li>
