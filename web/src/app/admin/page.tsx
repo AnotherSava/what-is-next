@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrisma } from "@/lib/db";
 import { plural, seconds } from "@/lib/format";
@@ -7,9 +6,10 @@ import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
 import { getSetting, isManualWatchedEnabled } from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
+import { addSelectedPlexItems } from "./actions";
 import { BackupNowButton, ManualWatchedToggle, RefreshNowButton } from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
-import { SyncPlexButton } from "./plex/_components/SyncButton";
+import { SyncPlexButton } from "./_components/SyncButton";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -51,11 +51,12 @@ export default async function AdminPage() {
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const plexOn = isPlexConfigured();
-  const [refresh, backup, plexSync, plexCandidates, tvdbStubs, manualWatched] = await Promise.all([
+  const [refresh, backup, plexSync, plexCandidates, plexUnaccounted, tvdbStubs, manualWatched] = await Promise.all([
     getSetting("refresh:lastRun"),
     getSetting("backup:lastRun"),
     plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
     plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
+    plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
     getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
     isManualWatchedEnabled(),
   ]);
@@ -90,12 +91,15 @@ export default async function AdminPage() {
       : null;
 
   // ── Plex sync ────────────────────────────────────────────────────────────
-  const candidateCount = plexCandidates?.items.length ?? 0;
+  const candidates = plexCandidates?.items ?? [];
+  const unaccounted = plexUnaccounted?.items ?? [];
+  const candidateCount = candidates.length;
+  const unaccountedCount = unaccounted.length;
   const plexState: JobState = !plexOn
     ? "off"
     : !plexSync
       ? "warn"
-      : stale(plexSync.at) || candidateCount > 0
+      : stale(plexSync.at) || candidateCount > 0 || unaccountedCount > 0
         ? "warn"
         : "ok";
   const plexFresh = !plexOn
@@ -107,7 +111,7 @@ export default async function AdminPage() {
         : `up to date · ${ago(plexSync.at, nowMs)}`;
   const plexDetail = !plexSync
     ? "Scan matches your Plex library to the catalog and marks what you have."
-    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported · ${seconds(plexSync.durationMs)}`;
+    : `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported · ${plexSync.unaccounted} unmatched · ${seconds(plexSync.durationMs)}`;
 
   // ── Backup ───────────────────────────────────────────────────────────────
   const backupState: JobState = !backup ? "warn" : !backup.ok || stale(backup.at) ? "warn" : "ok";
@@ -146,29 +150,80 @@ export default async function AdminPage() {
 
         <StatusCard label="Plex sync" state={plexState} freshness={plexFresh} at={plexSync?.at}>
           {plexOn ? (
-            <div className="space-y-2.5">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <SyncPlexButton />
                 <p className="text-sm text-[var(--color-muted)]">{plexDetail}</p>
               </div>
+
+              {/* In Plex but not tracked — the review-and-add list. Hidden when there's nothing to add. */}
               {candidateCount > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-behind)] bg-[var(--color-surface-2)] px-3 py-2">
-                  <p className="text-sm text-[var(--color-behind)]">
-                    {plural(candidateCount, "title")} in Plex {candidateCount === 1 ? "isn't" : "aren't"} tracked yet.
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-4">
+                  <h3 className="text-sm font-medium">
+                    In Plex but not tracked{" "}
+                    <span className="font-normal text-[var(--color-muted)]">({candidateCount})</span>
+                  </h3>
+                  <form action={addSelectedPlexItems} className="space-y-3">
+                    <ul className="space-y-1">
+                      {candidates.map((c) => (
+                        <li key={c.plexRatingKey}>
+                          <label className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[var(--color-surface-2)]">
+                            <input
+                              type="checkbox"
+                              name="ratingKey"
+                              value={c.plexRatingKey}
+                              defaultChecked
+                              className="accent-[#e5a00d]"
+                            />
+                            <span className="flex-1 text-sm">
+                              {c.title} {c.year && <span className="text-[var(--color-muted)]">({c.year})</span>}
+                              <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
+                                {c.mediaType === "tv" ? "TV" : "Movie"}
+                              </span>
+                              {c.plexWatched && <span className="ml-2 text-xs text-[var(--color-good)]">watched</span>}
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                    <button type="submit" className={ACTION_BUTTON_CLASS}>
+                      Add selected to tracking
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Unmatched in Plex — no external id, so the sync can't identify them. Hidden when there are none. */}
+              {unaccountedCount > 0 && (
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-4">
+                  <h3 className="text-sm font-medium">
+                    Unmatched in Plex{" "}
+                    <span className="font-normal text-[var(--color-muted)]">({unaccountedCount})</span>
+                  </h3>
+                  <p className="text-sm text-[var(--color-muted)]">
+                    In your Plex libraries but with no TMDB, IMDb, or TVDB id, so the sync can neither match them to the
+                    catalog nor add them automatically. Fix the match in Plex (item &rarr; Fix Match &rarr; pick the
+                    right title), then they&rsquo;ll sync normally.
                   </p>
-                  <Link href="/admin/plex" className={ACTION_BUTTON_CLASS}>
-                    Review &amp; add
-                  </Link>
+                  <ul className="space-y-1">
+                    {unaccounted.map((u) => (
+                      <li key={u.plexRatingKey} className="flex items-center gap-3 rounded-md px-2 py-1.5">
+                        <span className="flex-1 text-sm">
+                          {u.title} {u.year && <span className="text-[var(--color-muted)]">({u.year})</span>}
+                          <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
+                            {u.mediaType === "tv" ? "TV" : "Movie"}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
           ) : (
             <p className="text-sm text-[var(--color-muted)]">
               Set <span className="font-mono text-xs">PLEX_URL</span> +{" "}
-              <span className="font-mono text-xs">PLEX_TOKEN</span> to sync your library.{" "}
-              <Link href="/admin/plex" className="text-[var(--color-accent)] hover:underline">
-                Open Plex sync →
-              </Link>
+              <span className="font-mono text-xs">PLEX_TOKEN</span> to sync your library.
             </p>
           )}
         </StatusCard>
