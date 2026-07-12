@@ -3,7 +3,7 @@
 A personal, self-hosted tracker for TV series and movies — what I've watched, what I'm behind on, what's planned, and when new episodes air. Built to replace TV Time. One **owner** can edit; anyone with the link can browse it read-only as a showcase.
 
 - **Watch next** dashboard: two columns of what you can play right now from Plex — unwatched watchlist movies you own, and behind shows whose next episode is already in your library.
-- **Download** view: what to grab that isn't in Plex yet — released watchlist movies you don't own, and behind/not-started shows with aired episodes missing (shows grouped into "Get back", "More of", and "Not started").
+- **Download** view: what to grab that isn't in Plex yet — released watchlist movies you don't own, and behind/not-started shows with aired episodes missing (shows grouped into "Get back", "More of", and "Not started"). Each card links out to your configured search sources (e.g. a torrent tracker) for that title.
 - **Shows** grouped Behind / Up to date / Planned / Finished / Stopped, with per-episode checklists.
 - **Movies** watched + watchlist, mark-watched with a date.
 - **Search** TMDB and add titles; details hydrate in the background.
@@ -76,6 +76,6 @@ The SQLite database and nightly backups live on the `data` volume at `/data` (`D
 
 - **Nightly job** (registered in `src/instrumentation.ts`): refreshes TMDB metadata for still-airing shows and future/undated movies, backs up the SQLite file to `/data/backups` (14-day retention), and — when Plex is configured — refreshes the Plex presence badges and imports new watch history. Trigger the refresh manually — globally or per-show — from `/admin`.
 - **Plex** (when `PLEX_TOKEN` is set): run a sync and review/add Plex-only titles from `/admin`. Every sync (nightly + manual) refreshes presence and imports your Plex watch history. It also flags items in Plex it can't identify (no external id) so you can fix the match on the Plex side. The owner's browsing also triggers a throttled sync (at most once per `PLEX_VIEW_TTL_SECONDS`), so what you're looking at stays current without waiting for the nightly job; the freshness dot next to _Admin_ turns yellow/red as it ages. Adding _new titles_ to tracking is always a manual, reviewed action.
-- **Settings** (`/admin`): the manual "mark watched" controls are off by default — watch state comes from the Plex sync — and a checkbox re-enables them.
+- **Settings** (`/admin`): the manual "mark watched" controls are off by default — watch state comes from the Plex sync — and a checkbox re-enables them. You can also configure **download search links**: per-source URL templates (stored in the database, never in the repo) that add a search link to each movie and show in the Download view.
 - **TVDB fallback** (when `TVDB_API_KEY` is set): the refresh also hydrates catalog rows TMDB can't resolve (fan/web titles the import left as bare stubs) from TheTVDB, keyed by their TVDB id. `/admin` shows how many such titles remain.
 - **Backups** are consistent online SQLite snapshots; copy them off the volume periodically.

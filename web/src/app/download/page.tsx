@@ -5,9 +5,11 @@ import { Poster } from "@/app/_components/Poster";
 import { Section } from "@/app/_components/Section";
 import { displayDate, nowMs } from "@/lib/datetime";
 import { getDownloads, type DownloadMovie, type DownloadShow } from "@/lib/download";
+import { downloadLinksFor, type DownloadLink, type DownloadSource } from "@/lib/downloadSources";
 import { formatInterval } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getDisplayedUser } from "@/lib/session";
+import { getDownloadSources } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Download" };
 
@@ -18,7 +20,10 @@ export const metadata: Metadata = { title: "Download" };
 // downloaded. Renders for the displayed user; it's a read-only view (nothing here is in Plex to play or mark).
 export default async function DownloadPage() {
   const displayedUser = await getDisplayedUser();
-  const { movies, getBack, moreOf, notStarted } = await getDownloads(displayedUser.id);
+  const [{ movies, getBack, moreOf, notStarted }, sources] = await Promise.all([
+    getDownloads(displayedUser.id),
+    getDownloadSources(),
+  ]);
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
   const showsEmpty = getBack.length === 0 && moreOf.length === 0 && notStarted.length === 0;
   const empty = movies.length === 0 && showsEmpty;
@@ -40,7 +45,7 @@ export default async function DownloadPage() {
             {movies.length > 0 ? (
               <ul className="space-y-2">
                 {movies.map((m) => (
-                  <MovieRow key={m.movieId} movie={m} />
+                  <MovieRow key={m.movieId} movie={m} sources={sources} />
                 ))}
               </ul>
             ) : (
@@ -60,7 +65,7 @@ export default async function DownloadPage() {
                   <Section title="Get back" count={getBack.length}>
                     <ul className="space-y-2">
                       {getBack.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} showAge />
+                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} showAge />
                       ))}
                     </ul>
                   </Section>
@@ -70,7 +75,7 @@ export default async function DownloadPage() {
                   <Section title="More of" count={moreOf.length}>
                     <ul className="space-y-2">
                       {moreOf.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} showAge />
+                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} showAge />
                       ))}
                     </ul>
                   </Section>
@@ -80,7 +85,7 @@ export default async function DownloadPage() {
                   <Section title="Not started" count={notStarted.length}>
                     <ul className="space-y-2">
                       {notStarted.map((s) => (
-                        <DownloadRow key={s.showId} show={s} now={now} />
+                        <DownloadRow key={s.showId} show={s} now={now} sources={sources} />
                       ))}
                     </ul>
                   </Section>
@@ -98,9 +103,10 @@ function episodeLabel(seasonNumber: number, episodeNumber: number): string {
   return `Season ${seasonNumber}, Episode ${episodeNumber}`;
 }
 
-function MovieRow({ movie }: { movie: DownloadMovie }) {
+function MovieRow({ movie, sources }: { movie: DownloadMovie; sources: DownloadSource[] }) {
   // No play button — the movie isn't in Plex; the poster links to the movie page instead (mirrors DownloadRow).
   const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
+  const links = downloadLinksFor(sources, "movies", movie.title);
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <Link href={`/movies/${movie.movieId}`} className="shrink-0 leading-none" aria-label={movie.title}>
@@ -112,12 +118,45 @@ function MovieRow({ movie }: { movie: DownloadMovie }) {
         </Link>
         {year && <p className="truncate text-sm text-[var(--color-muted)]">{year}</p>}
       </div>
+      <SourceLinks links={links} />
     </li>
   );
 }
 
-function DownloadRow({ show, now, showAge = false }: { show: DownloadShow; now: number; showAge?: boolean }) {
+// The download-source chips shown in a card's top-right corner (movies and shows alike, so they can't drift).
+// Each opens the source's search in a new tab. Renders nothing when there are no configured sources for this card.
+function SourceLinks({ links }: { links: DownloadLink[] }) {
+  if (links.length === 0) return null;
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1 self-start">
+      {links.map((link) => (
+        <a
+          key={link.href}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-strong)]"
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function DownloadRow({
+  show,
+  now,
+  sources,
+  showAge = false,
+}: {
+  show: DownloadShow;
+  now: number;
+  sources: DownloadSource[];
+  showAge?: boolean;
+}) {
   const age = showAge && show.lastWatchedAt;
+  const links = downloadLinksFor(sources, "shows", show.title);
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       {/* No play button — the episode isn't in Plex; the poster links to the show instead. */}
@@ -133,6 +172,7 @@ function DownloadRow({ show, now, showAge = false }: { show: DownloadShow; now: 
         </p>
         <p className="min-h-5 truncate text-sm text-[var(--color-muted)]">{show.nextDownload.title}</p>
       </div>
+      <SourceLinks links={links} />
       {(show.isFavorite || age || show.missingCount > 1) && (
         // Mirror the left column's 3 lines: favorite ♥ on top, last-watched in the middle, "+N more" on the bottom.
         <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { runBackup } from "@/lib/backup";
 import { addPlexItems, plexDeps, syncPlexPresence } from "@/lib/plex";
 import { refreshOne } from "@/lib/refresh";
+import { cleanDownloadSources, type DownloadSource } from "@/lib/downloadSources";
 import { requireOwner } from "@/lib/session";
 import { getSetting, setSetting } from "@/lib/settings";
 
@@ -31,6 +32,16 @@ export async function setManualWatched(enabled: boolean): Promise<void> {
   await setSetting("settings:manualWatched", { enabled });
   // Every surface that renders watched controls re-reads the flag.
   for (const p of ["/admin", "/", "/shows", "/movies"]) revalidatePath(p);
+}
+
+// Replace the Download view's list of download-source links. Stored in the DB, not the repo, so the sources stay
+// out of version control. Blank rows (no template) are dropped and text is trimmed; the Download page re-reads the
+// list to render each card's chips.
+export async function setDownloadSources(sources: DownloadSource[]): Promise<void> {
+  await requireOwner();
+  await setSetting("settings:downloadSources", { sources: cleanDownloadSources(sources) });
+  revalidatePath("/admin");
+  revalidatePath("/download");
 }
 
 // ── Plex sync ──────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
+import type { DownloadSource } from "@/lib/downloadSources";
 
 // App-level configuration and bookkeeping (brief §5 Setting model, §5a rule 4: app state lives in Setting,
 // per-user preferences would get their own table). JSON-encoded rows; this module is the only access path —
@@ -80,6 +81,19 @@ const plexUnaccountedSchema = z.object({
 // comes from the Plex sync, and the owner opts in to manual toggles from the admin page.
 const manualWatchedSchema = z.object({ enabled: z.boolean() });
 
+// Owner-configured download-source links for the Download view (torrent/tracker searches). Each source's URL —
+// domain, path, params — lives here, in runtime config, not the repo, so no download-source details are ever
+// committed. A source targets movie cards, show cards, or both; its template carries a {query} placeholder
+// replaced with the URL-encoded title. Kept permissive (any string) on purpose: the URL shape is validated where
+// it's used — see src/lib/downloadSources.ts.
+const downloadSourceSchema = z.object({
+  label: z.string(),
+  template: z.string(),
+  movies: z.boolean(),
+  shows: z.boolean(),
+});
+const downloadSourcesSchema = z.object({ sources: z.array(downloadSourceSchema) });
+
 // Per-show watched-episode-count cursor (Plex integration): plexRatingKey → total viewedLeafCount at the last
 // sync. Lets the next sync skip the /allLeaves fetch for any show whose count is unchanged (see scanPlex).
 const plexWatchCursorSchema = z.object({
@@ -109,6 +123,7 @@ const SETTING_SCHEMAS = {
   "plex:presenceCursor": plexPresenceCursorSchema,
   "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
+  "settings:downloadSources": downloadSourcesSchema,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
@@ -133,4 +148,9 @@ export async function isManualWatchedEnabled(): Promise<boolean> {
 // The Plex server's machineIdentifier, or null until a sync has recorded it — needed to build watch deep links.
 export async function getPlexServerId(): Promise<string | null> {
   return (await getSetting("plex:server"))?.machineIdentifier ?? null;
+}
+
+// The owner-configured Download-view source links (empty when unset) — the Download page renders a chip per source.
+export async function getDownloadSources(): Promise<DownloadSource[]> {
+  return (await getSetting("settings:downloadSources"))?.sources ?? [];
 }
