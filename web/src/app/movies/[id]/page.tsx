@@ -38,7 +38,14 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="space-y-6">
       <div className="flex gap-4">
-        <PosterPlay path={movie.posterPath} alt={movie.title} width={120} height={180} size="w342" watchUrl={watchUrl} />
+        <PosterPlay
+          path={movie.posterPath}
+          alt={movie.title}
+          width={120}
+          height={180}
+          size="w342"
+          watchUrl={watchUrl}
+        />
         <div className="min-w-0 flex-1 space-y-2">
           <div>
             <h1 className="text-xl font-semibold leading-tight">

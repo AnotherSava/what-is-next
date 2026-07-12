@@ -189,7 +189,12 @@ export async function scanPlex(
             lastViewedAt: item.lastViewedAt ?? null,
           });
         } else {
-          unaccounted.push({ plexRatingKey: item.ratingKey, mediaType: "tv", title: item.title, year: item.year ?? null });
+          unaccounted.push({
+            plexRatingKey: item.ratingKey,
+            mediaType: "tv",
+            title: item.title,
+            year: item.year ?? null,
+          });
         }
       } else {
         if (match) {
@@ -216,7 +221,12 @@ export async function scanPlex(
             lastViewedAt: item.lastViewedAt ?? null,
           });
         } else {
-          unaccounted.push({ plexRatingKey: item.ratingKey, mediaType: "movie", title: item.title, year: item.year ?? null });
+          unaccounted.push({
+            plexRatingKey: item.ratingKey,
+            mediaType: "movie",
+            title: item.title,
+            year: item.year ?? null,
+          });
         }
       }
     }
