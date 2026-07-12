@@ -42,6 +42,17 @@ export interface EpisodePresenceSignal {
   episodeNumber: number;
 }
 
+// A Plex library item the sync can't reconcile: it matched no catalog entry AND carries no external id
+// (tmdb/tvdb/imdb), so — unlike a candidate — it can't be auto-hydrated from TMDB and tracked. Almost always
+// means Plex itself hasn't matched the file to a metadata agent (a "local" item). Surfaced for the admin so these
+// otherwise-invisible files aren't silently dropped; the remedy is to fix the match in Plex.
+export interface UnaccountedItem {
+  plexRatingKey: string;
+  mediaType: MediaType;
+  title: string;
+  year: number | null;
+}
+
 export interface ScanResult {
   matchedShows: number;
   matchedMovies: number;
@@ -61,6 +72,9 @@ export interface ScanResult {
   // mediaItemId → the episodes present in Plex, only for shows re-fetched this scan (their leafCount changed).
   // Other still-matched shows are absent here and keep their existing presence rows.
   episodePresence: Record<string, EpisodePresenceSignal[]>;
+  // Plex items in the scanned libraries that matched no catalog entry and have no external id — they can't be
+  // auto-tracked (see UnaccountedItem). Surfaced so they aren't invisible; the admin decides what to do.
+  unaccounted: UnaccountedItem[];
 }
 
 type MediaType = "tv" | "movie";
@@ -113,6 +127,7 @@ export async function scanPlex(
   const matchedShowIds: string[] = [];
   const episodePresence: Record<string, EpisodePresenceSignal[]> = {};
   const candidates: PlexCandidate[] = [];
+  const unaccounted: UnaccountedItem[] = [];
   let matchedShows = 0;
   let matchedMovies = 0;
   let presenceSeasons = 0;
@@ -173,6 +188,8 @@ export async function scanPlex(
             plexWatched: watchedLeaves > 0,
             lastViewedAt: item.lastViewedAt ?? null,
           });
+        } else {
+          unaccounted.push({ plexRatingKey: item.ratingKey, mediaType: "tv", title: item.title, year: item.year ?? null });
         }
       } else {
         if (match) {
@@ -198,6 +215,8 @@ export async function scanPlex(
             plexWatched: (item.viewCount ?? 0) > 0,
             lastViewedAt: item.lastViewedAt ?? null,
           });
+        } else {
+          unaccounted.push({ plexRatingKey: item.ratingKey, mediaType: "movie", title: item.title, year: item.year ?? null });
         }
       }
     }
@@ -214,6 +233,7 @@ export async function scanPlex(
     presenceCursor: nextPresenceCursor,
     matchedShowIds,
     episodePresence,
+    unaccounted,
   };
 }
 

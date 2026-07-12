@@ -50,8 +50,10 @@ export async function syncPlexPresence(
     presenceSeasons: r.presenceSeasons,
     importedWatches,
     durationMs,
+    unaccounted: r.unaccounted.length,
   });
   await setSetting("plex:candidates", { at, items: r.candidates });
+  await setSetting("plex:unaccounted", { at, items: r.unaccounted });
   await setSetting("plex:watchCursor", { at, shows: r.watchCursor });
   await setSetting("plex:presenceCursor", { at, shows: r.presenceCursor });
   return { ...r, importedWatches, durationMs, presenceChanged };

@@ -38,6 +38,7 @@ const plexLastSyncSchema = z.object({
   presenceSeasons: z.number().int(),
   importedWatches: z.number().int().default(0), // watch events imported this run; default keeps pre-feature summaries parseable
   durationMs: z.number().int().default(0), // wall-clock of the sync; default keeps pre-timing summaries parseable
+  unaccounted: z.number().int().default(0), // Plex items we couldn't identify (no id); default keeps pre-feature summaries parseable
 });
 
 // A Plex library item that isn't yet in the tracker — surfaced for the "review, then add" flow. Carries the
@@ -59,6 +60,20 @@ export type PlexCandidate = z.infer<typeof plexCandidateSchema>;
 const plexCandidatesSchema = z.object({
   at: z.string(),
   items: z.array(plexCandidateSchema),
+});
+
+// A Plex library item the sync couldn't reconcile — no catalog match AND no external id, so it can't be
+// auto-added like a candidate (nothing to hydrate from). Surfaced for the admin (see scanPlex's UnaccountedItem);
+// it usually means Plex hasn't matched the file to a metadata agent, so the fix is on the Plex side.
+const plexUnaccountedItemSchema = z.object({
+  plexRatingKey: z.string(),
+  mediaType: z.enum(["tv", "movie"]),
+  title: z.string(),
+  year: z.number().int().nullable(),
+});
+const plexUnaccountedSchema = z.object({
+  at: z.string(),
+  items: z.array(plexUnaccountedItemSchema),
 });
 
 // User-facing app setting: whether the manual "mark watched" controls are shown. Off by default — watch state
@@ -89,6 +104,7 @@ const SETTING_SCHEMAS = {
   "backup:lastRun": backupLastRunSchema,
   "plex:lastSync": plexLastSyncSchema,
   "plex:candidates": plexCandidatesSchema,
+  "plex:unaccounted": plexUnaccountedSchema,
   "plex:watchCursor": plexWatchCursorSchema,
   "plex:presenceCursor": plexPresenceCursorSchema,
   "plex:server": plexServerSchema,

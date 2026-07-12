@@ -10,6 +10,7 @@ export {
   type PlexSyncDeps,
   type PresenceRow,
   type ScanResult,
+  type UnaccountedItem,
   type WatchedSignal,
 } from "./sync";
 export { getPlexEpisodePresence, getPlexPresenceKeys, getShowPlexPresence } from "./presence";

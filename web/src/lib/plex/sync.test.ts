@@ -146,15 +146,22 @@ describe("scanPlex", () => {
     );
     expect(r.candidates.map((c) => c.title).sort()).toEqual(["New Movie", "New Show"]);
     expect(r.candidates.find((c) => c.title === "New Show")?.plexWatched).toBe(true);
+    expect(r.unaccounted).toHaveLength(0); // every fake item carries an external id
   });
 
-  it("skips Plex items with no external id (can't be tracked)", async () => {
+  it("surfaces Plex items with no external id as unaccounted, not candidates", async () => {
+    // An untagged movie AND an untagged show: Plex has the files but matched neither to a metadata agent, so
+    // both lack any external id — they can't be tracked and must not masquerade as add-candidates.
     const plex = {
       async getSections() {
-        return [{ key: "3", type: "movie", title: "Movies" }];
+        return [
+          { key: "2", type: "show", title: "TV" },
+          { key: "3", type: "movie", title: "Movies" },
+        ];
       },
-      async getSectionItems() {
-        return [{ ratingKey: "u1", type: "movie", title: "Untagged File", Guid: [] }];
+      async getSectionItems(key: string) {
+        if (key === "2") return [{ ratingKey: "u2", type: "show", title: "Untagged Show", Guid: [] }];
+        return [{ ratingKey: "u1", type: "movie", title: "Untagged File", year: 2001, Guid: [] }];
       },
       async getShowSeasons() {
         return [];
@@ -165,6 +172,13 @@ describe("scanPlex", () => {
     } as unknown as PlexClient;
     const r = await scanPlex({ prisma, plex, tmdb: fakeTmdb(), userId: "owner" });
     expect(r.candidates).toHaveLength(0);
+    expect(r.unaccounted).toEqual(
+      expect.arrayContaining([
+        { plexRatingKey: "u1", mediaType: "movie", title: "Untagged File", year: 2001 },
+        { plexRatingKey: "u2", mediaType: "tv", title: "Untagged Show", year: null },
+      ]),
+    );
+    expect(r.unaccounted).toHaveLength(2);
   });
 });
 
