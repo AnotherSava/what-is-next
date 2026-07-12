@@ -1,9 +1,11 @@
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
+import { getPlexEpisodePresence, isPlexConfigured } from "@/lib/plex";
 import { getFollowedShows } from "@/lib/shows";
 
-// Data for the "Watch next" home dashboard (brief §8.1): the behind shows with their next-up episode, split into
-// "watch right now" (in your Plex library) and the rest (find them elsewhere). Explicit userId (§5a rule 1).
+// Data for the "Watch next" home dashboard (brief §8.1): the behind shows you can play right now — those whose
+// NEXT-UP episode is in your Plex library. (Behind shows whose next episode isn't in Plex belong to the Download
+// view, not here.) Explicit userId (§5a rule 1).
 
 export interface BehindShow {
   showId: string;
@@ -11,15 +13,14 @@ export interface BehindShow {
   posterPath: string | null;
   isFavorite: boolean;
   unwatchedAiredCount: number;
-  inPlex: boolean; // in the user's Plex library → can be played right now
-  plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (when inPlex)
+  nextUpInPlex: boolean; // the NEXT-UP episode is in the user's Plex library → can be played right now
+  plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (set when the show is in Plex)
   lastWatchedAt: Date | null; // when an episode was last watched (any source), or null if all watches are undated
   nextUp: { episodeId: string; seasonNumber: number; episodeNumber: number; title: string | null };
 }
 
 export interface Dashboard {
-  readyInPlex: BehindShow[]; // behind shows you can watch right now — they're in your Plex library
-  behind: BehindShow[]; // behind on, but not in Plex (find them elsewhere)
+  readyInPlex: BehindShow[]; // behind shows you can watch right now — their next-up episode is in your Plex library
 }
 
 export async function getDashboard(userId: string, today: string = todayISO()): Promise<Dashboard> {
@@ -31,12 +32,14 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
   // watch time per behind show — it orders "Watch right now" and shows an "N ago" age on each card.
   const nextIds = behindShows.map((s) => s.progress.nextUp!.id);
   const behindIds = behindShows.map((s) => s.id);
-  const [nextEps, watchRows] = await Promise.all([
+  const [nextEps, watchRows, plexEpisodeIds] = await Promise.all([
     prisma.episode.findMany({ where: { id: { in: nextIds } }, select: { id: true, title: true } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: { in: behindIds }, episodeId: { not: null } },
       select: { mediaItemId: true, watchedAt: true },
     }),
+    // Per-episode Plex presence: "Watch right now" is gated on the NEXT-UP episode being present, not the show.
+    isPlexConfigured() ? getPlexEpisodePresence(userId) : Promise.resolve(new Set<string>()),
   ]);
   const titleById = new Map(nextEps.map((e) => [e.id, e.title]));
   // Latest watchedAt (epoch ms) per show; a show whose watches are all undated sinks to the bottom (-Infinity).
@@ -57,7 +60,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,
       unwatchedAiredCount: s.progress.unwatchedAiredCount,
-      inPlex: s.inPlex,
+      nextUpInPlex: plexEpisodeIds.has(n.id),
       plexRatingKey: s.plexRatingKey,
       lastWatchedAt: ms != null ? new Date(ms) : null,
       nextUp: {
@@ -68,14 +71,11 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       },
     };
   });
-  // "Watch right now" (in Plex) leads with the show you watched most recently; the rest — find them elsewhere —
-  // stay ordered by how far behind you are.
+  // "Watch right now" (next-up episode is in Plex) leads with the show you watched most recently. Behind shows
+  // whose next episode isn't in Plex are intentionally omitted here — they live in the Download view.
   const readyInPlex = behindAll
-    .filter((b) => b.inPlex)
+    .filter((b) => b.nextUpInPlex)
     .sort((a, b) => lastWatch(b.showId) - lastWatch(a.showId) || a.title.localeCompare(b.title));
-  const behind = behindAll
-    .filter((b) => !b.inPlex)
-    .sort((a, b) => b.unwatchedAiredCount - a.unwatchedAiredCount || a.title.localeCompare(b.title));
 
-  return { readyInPlex, behind };
+  return { readyInPlex };
 }

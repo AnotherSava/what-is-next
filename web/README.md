@@ -2,7 +2,8 @@
 
 A personal, self-hosted tracker for TV series and movies — what I've watched, what I'm behind on, what's planned, and when new episodes air. Built to replace TV Time. One **owner** can edit; anyone with the link can browse it read-only as a showcase.
 
-- **Watch next** dashboard: a "Watch right now" section for behind shows you have in Plex, plus the rest of what you're behind on with each show's next episode.
+- **Watch next** dashboard: your behind shows whose next episode is already in Plex — the ones you can play right now.
+- **Download** view: behind and not-started shows with aired episodes not yet in Plex — what to grab next, grouped into "Get back" (nothing left to watch in Plex), "More of" (still some downloaded), and "Not started".
 - **Shows** grouped Behind / Up to date / Planned / Finished / Stopped, with per-episode checklists.
 - **Movies** watched + watchlist, mark-watched with a date.
 - **Search** TMDB and add titles; details hydrate in the background.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
+import { Section } from "@/app/_components/Section";
 import { getDashboard, type BehindShow } from "@/lib/dashboard";
 import { displayDate, nowMs } from "@/lib/datetime";
 import { formatInterval } from "@/lib/format";
@@ -8,20 +9,20 @@ import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 
-// Home / "Watch next" — the payoff screen (brief §8.1). Behind shows with their next-up episode, split into
-// "Watch right now" (in Plex) and "Behind". Renders the same for viewer and owner; only the one-tap
-// "mark watched" affordance is gated on canEdit.
+// Home / "Watch next" — the payoff screen (brief §8.1). "Watch right now": behind shows whose next-up episode is
+// in your Plex library, so you can play it immediately. (Behind shows whose next episode isn't in Plex live in the
+// Download view.) Renders the same for viewer and owner; only the one-tap "mark watched" affordance is gated on canEdit.
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ readyInPlex, behind }, manualWatched, plexServerId] = await Promise.all([
+  const [{ readyInPlex }, manualWatched, plexServerId] = await Promise.all([
     getDashboard(displayedUser.id),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
-  const empty = readyInPlex.length === 0 && behind.length === 0;
+  const empty = readyInPlex.length === 0;
 
   return (
     <div className="space-y-8">
@@ -30,8 +31,8 @@ export default async function HomePage() {
       {empty && (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
           {canEdit
-            ? "You're all caught up. Add a title from Search to track something new."
-            : "Nothing to watch right now — all caught up."}
+            ? "Nothing ready to watch in Plex right now — check Download for episodes to grab."
+            : "Nothing ready to watch in Plex right now."}
         </div>
       )}
 
@@ -50,35 +51,7 @@ export default async function HomePage() {
           </ul>
         </Section>
       )}
-
-      {behind.length > 0 && (
-        <Section title="Behind" count={behind.length}>
-          <ul className="space-y-2">
-            {behind.map((s) => (
-              <BehindRow
-                key={s.showId}
-                show={s}
-                canMarkWatched={canMarkWatched}
-                plexServerId={plexServerId}
-                now={now}
-              />
-            ))}
-          </ul>
-        </Section>
-      )}
     </div>
-  );
-}
-
-function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-        {title}
-        <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-xs">{count}</span>
-      </h2>
-      {children}
-    </section>
   );
 }
 
@@ -97,7 +70,9 @@ function BehindRow({
   plexServerId: string | null;
   now: number;
 }) {
-  const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
+  // Play button only when the NEXT-UP episode is in Plex (i.e. the "Watch right now" rows) — a behind show whose
+  // show is in Plex but whose next episode isn't shouldn't offer a "watch now" affordance.
+  const watchUrl = show.nextUpInPlex ? plexWatchUrl(plexServerId, show.plexRatingKey) : null;
   return (
     <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
       <PosterPlay path={show.posterPath} alt={show.title} width={48} height={72} size="w185" watchUrl={watchUrl} />

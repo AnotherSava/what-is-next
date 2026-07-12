@@ -17,6 +17,8 @@ export function SiteHeader({
 }) {
   const links: { href: string; label: string }[] = [
     { href: "/", label: "Watch next" },
+    // Owner-only: Download surfaces what to acquire for your own Plex library — an owner utility, not viewer content.
+    ...(isOwner ? [{ href: "/download", label: "Download" }] : []),
     { href: "/shows", label: "Shows" },
     { href: "/movies", label: "Movies" },
     { href: "/recent", label: "Recently watched" },
