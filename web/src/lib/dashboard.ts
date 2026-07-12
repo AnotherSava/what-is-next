@@ -1,11 +1,21 @@
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
+import { getMovies } from "@/lib/movies";
 import { getPlexEpisodePresence, isPlexConfigured } from "@/lib/plex";
 import { getFollowedShows } from "@/lib/shows";
 
-// Data for the "Watch next" home dashboard (brief §8.1): the behind shows you can play right now — those whose
-// NEXT-UP episode is in your Plex library. (Behind shows whose next episode isn't in Plex belong to the Download
-// view, not here.) Explicit userId (§5a rule 1).
+// Data for the "Watch next" home dashboard (brief §8.1): what you can play right now from Plex — unwatched
+// watchlist movies that are in your library, plus behind shows whose NEXT-UP episode is in your library. (Behind
+// shows whose next episode isn't in Plex belong to the Download view, not here.) Explicit userId (§5a rule 1).
+
+// A watchlist movie present in Plex — playable right now (the Movies column of "Watch next").
+export interface ReadyMovie {
+  movieId: string;
+  title: string;
+  posterPath: string | null;
+  releaseDate: string | null; // ISO date; only its year is rendered
+  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+}
 
 export interface BehindShow {
   showId: string;
@@ -20,12 +30,19 @@ export interface BehindShow {
 }
 
 export interface Dashboard {
+  readyMovies: ReadyMovie[]; // unwatched watchlist movies present in Plex — playable right now (recently added first)
   readyInPlex: BehindShow[]; // behind shows you can watch right now — their next-up episode is in your Plex library
 }
 
 export async function getDashboard(userId: string, today: string = todayISO()): Promise<Dashboard> {
   const prisma = getPrisma();
-  const shows = await getFollowedShows(userId, today);
+  const [shows, movies] = await Promise.all([getFollowedShows(userId, today), getMovies(userId)]);
+
+  // Movies column: watchlist (unwatched) titles that are in the user's Plex library. Keeps getMovies' watchlist
+  // order (most recently added first).
+  const readyMovies: ReadyMovie[] = movies.watchlist
+    .filter((m) => m.inPlex)
+    .map((m) => ({ movieId: m.id, title: m.title, posterPath: m.posterPath, releaseDate: m.releaseDate, plexRatingKey: m.plexRatingKey }));
 
   const behindShows = shows.filter((s) => s.group === "behind" && s.progress.nextUp);
   // Enrich each next-up episode with its title (progress.ts stays title-agnostic), and load the most-recent
@@ -77,5 +94,5 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
     .filter((b) => b.nextUpInPlex)
     .sort((a, b) => lastWatch(b.showId) - lastWatch(a.showId) || a.title.localeCompare(b.title));
 
-  return { readyInPlex };
+  return { readyMovies, readyInPlex };
 }

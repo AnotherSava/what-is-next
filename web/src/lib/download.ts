@@ -1,5 +1,6 @@
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
+import { getMovies } from "@/lib/movies";
 import { getPlexEpisodePresence, isPlexConfigured } from "@/lib/plex";
 import { compareEpisodes, hasAired, type ProgressEpisode } from "@/lib/progress";
 import { getFollowedShows } from "@/lib/shows";
@@ -27,10 +28,25 @@ export interface DownloadShow {
   nextDownload: DownloadEpisode; // earliest missing episode — the one to grab next
 }
 
-export interface Downloads {
+// A tracked movie you'd need to acquire — on your watchlist (unwatched) but not in your Plex library. The movie
+// counterpart of DownloadShow; no episode/missing-count fields since a movie is a single title.
+export interface DownloadMovie {
+  movieId: string;
+  title: string;
+  posterPath: string | null;
+  releaseDate: string | null; // ISO date; only its year is rendered
+}
+
+// The show side of the Download view — the three buckets classifyDownloads produces (kept separate so that pure
+// function stays movie-agnostic and its tests are unaffected).
+export interface ShowDownloads {
   getBack: DownloadShow[]; // started, 0 unwatched aired episodes left in Plex — watched what you have; download to continue
   moreOf: DownloadShow[]; // started, still have unwatched aired episodes in Plex — but more aired ones to grab too
   notStarted: DownloadShow[]; // tracked-but-unstarted shows with aired episodes Plex doesn't have
+}
+
+export interface Downloads extends ShowDownloads {
+  movies: DownloadMovie[]; // watchlist movies not in your Plex library — the Movies column of the Download view
 }
 
 interface EpisodeRow extends ProgressEpisode {
@@ -66,17 +82,25 @@ export function unwatchedInPlexCount(
 
 export async function getDownloads(userId: string, today: string = todayISO()): Promise<Downloads> {
   // "Not in Plex" is meaningless without a Plex library to compare against — the whole view is Plex-gated.
-  if (!isPlexConfigured()) return { getBack: [], moreOf: [], notStarted: [] };
+  if (!isPlexConfigured()) return { movies: [], getBack: [], moreOf: [], notStarted: [] };
   const prisma = getPrisma();
 
   // Reuse the shared grouping so "started" (Behind) and "not started" (Planned) never drift from the rest of the
   // app; only these two groups can have anything left to download (Up-to-date/Finished have no unwatched aired
   // episodes, Stopped isn't wanted). getFollowedShows already applies the favorite→Planned coercion.
-  const shows = await getFollowedShows(userId, today);
+  const [shows, moviesView] = await Promise.all([getFollowedShows(userId, today), getMovies(userId)]);
+  // Movies column: watchlist (unwatched) titles that aren't in the user's Plex library AND have already been
+  // released — the ones you could actually go and grab. hasAired doubles as "has this movie come out?" (a null or
+  // future release date counts as not released, mirroring the shows' aired-episode rule). Keeps getMovies'
+  // watchlist order (most recently added first).
+  const movies: DownloadMovie[] = moviesView.watchlist
+    .filter((m) => !m.inPlex && hasAired(m.releaseDate, today))
+    .map((m) => ({ movieId: m.id, title: m.title, posterPath: m.posterPath, releaseDate: m.releaseDate }));
+
   const started = shows.filter((s) => s.group === "behind");
   const notStarted = shows.filter((s) => s.group === "planned");
   const relevant = [...started, ...notStarted];
-  if (relevant.length === 0) return { getBack: [], moreOf: [], notStarted: [] };
+  if (relevant.length === 0) return { movies, getBack: [], moreOf: [], notStarted: [] };
   const ids = relevant.map((s) => s.id);
 
   const [episodes, seen, presentIds] = await Promise.all([
@@ -150,7 +174,7 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
     .map(analyze)
     .filter(notNull)
     .map((x) => x.row);
-  return classifyDownloads(startedAnalyzed, notStartedRows);
+  return { movies, ...classifyDownloads(startedAnalyzed, notStartedRows) };
 }
 
 // One analyzed started show: its download row + how many unwatched aired episodes are still in Plex (0 → "Get
@@ -164,7 +188,7 @@ export interface AnalyzedShow {
 // order every section. PURE — the split predicate and the comparators live here so they're unit-testable. Get back
 // and More of lead with the show you watched most recently (last-watched date descending, title tie-break; undated
 // watches sink last); Not started leads with the most episodes to grab.
-export function classifyDownloads(started: AnalyzedShow[], notStarted: DownloadShow[]): Downloads {
+export function classifyDownloads(started: AnalyzedShow[], notStarted: DownloadShow[]): ShowDownloads {
   const lastMs = (d: DownloadShow) => (d.lastWatchedAt ? d.lastWatchedAt.getTime() : -Infinity);
   const byRecentWatch = (a: DownloadShow, b: DownloadShow) => lastMs(b) - lastMs(a) || a.title.localeCompare(b.title);
   const byMostMissing = (a: DownloadShow, b: DownloadShow) =>

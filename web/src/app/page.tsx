@@ -1,57 +1,92 @@
 import Link from "next/link";
+import { EmptyColumn } from "@/app/_components/EmptyColumn";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
 import { Section } from "@/app/_components/Section";
-import { getDashboard, type BehindShow } from "@/lib/dashboard";
+import { getDashboard, type BehindShow, type ReadyMovie } from "@/lib/dashboard";
 import { displayDate, nowMs } from "@/lib/datetime";
 import { formatInterval } from "@/lib/format";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 
-// Home / "Watch next" — the payoff screen (brief §8.1). "Watch right now": behind shows whose next-up episode is
-// in your Plex library, so you can play it immediately. (Behind shows whose next episode isn't in Plex live in the
-// Download view.) Renders the same for viewer and owner; only the one-tap "mark watched" affordance is gated on canEdit.
+// Home / "Watch next" — the payoff screen (brief §8.1). Two columns of what's playable right now from Plex:
+// Movies (unwatched watchlist titles in your library) on the left, Shows (behind shows whose next-up episode is
+// in your library) on the right. (Behind shows whose next episode isn't in Plex live in the Download view.)
+// Renders the same for viewer and owner; only the shows' one-tap "mark watched" affordance is gated on canEdit.
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ readyInPlex }, manualWatched, plexServerId] = await Promise.all([
+  const [{ readyMovies, readyInPlex }, manualWatched, plexServerId] = await Promise.all([
     getDashboard(displayedUser.id),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
-  const empty = readyInPlex.length === 0;
+  const empty = readyMovies.length === 0 && readyInPlex.length === 0;
 
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold tracking-tight">Watch next</h1>
 
-      {empty && (
+      {empty ? (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
           {canEdit
             ? "Nothing ready to watch in Plex right now — check Download for episodes to grab."
             : "Nothing ready to watch in Plex right now."}
         </div>
-      )}
+      ) : (
+        // Movies left, Shows right; stacks with Movies first on narrow screens.
+        <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+          <Section title="Movies" count={readyMovies.length}>
+            {readyMovies.length > 0 ? (
+              <ul className="space-y-2">
+                {readyMovies.map((m) => (
+                  <MovieRow key={m.movieId} movie={m} plexServerId={plexServerId} />
+                ))}
+              </ul>
+            ) : (
+              <EmptyColumn>No movies ready in Plex right now.</EmptyColumn>
+            )}
+          </Section>
 
-      {readyInPlex.length > 0 && (
-        <Section title="Watch right now" count={readyInPlex.length}>
-          <ul className="space-y-2">
-            {readyInPlex.map((s) => (
-              <BehindRow
-                key={s.showId}
-                show={s}
-                canMarkWatched={canMarkWatched}
-                plexServerId={plexServerId}
-                now={now}
-              />
-            ))}
-          </ul>
-        </Section>
+          <Section title="Shows" count={readyInPlex.length}>
+            {readyInPlex.length > 0 ? (
+              <ul className="space-y-2">
+                {readyInPlex.map((s) => (
+                  <BehindRow
+                    key={s.showId}
+                    show={s}
+                    canMarkWatched={canMarkWatched}
+                    plexServerId={plexServerId}
+                    now={now}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <EmptyColumn>No shows ready in Plex right now.</EmptyColumn>
+            )}
+          </Section>
+        </div>
       )}
     </div>
+  );
+}
+
+function MovieRow({ movie, plexServerId }: { movie: ReadyMovie; plexServerId: string | null }) {
+  const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
+  const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+      <PosterPlay path={movie.posterPath} alt={movie.title} width={48} height={72} size="w185" watchUrl={watchUrl} />
+      <div className="min-w-0 flex-1">
+        <Link href={`/movies/${movie.movieId}`} className="block truncate text-lg font-medium hover:underline">
+          {movie.title}
+        </Link>
+        {year && <p className="truncate text-sm text-[var(--color-muted)]">{year}</p>}
+      </div>
+    </li>
   );
 }
 
