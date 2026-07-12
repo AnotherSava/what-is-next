@@ -64,6 +64,7 @@ model MediaItem {
   listItems       ListItem[]
   ratings         Rating[]
   plexPresence    PlexPresence[]
+  plexEpisodes    PlexEpisodePresence[]
   plexSuppression PlexWatchSuppression[]
 
   @@unique([tvdbId, mediaType]) // TVDB numbers movies and series independently
@@ -111,6 +112,7 @@ model Episode {
   seen            SeenEvent[]
   listItems       ListItem[]
   ratings         Rating[]
+  plexPresence    PlexEpisodePresence[]
   plexSuppression PlexWatchSuppression[]
 
   @@unique([mediaItemId, seasonNumber, episodeNumber])
@@ -134,6 +136,7 @@ model User {
   lists           List[]
   ratings         Rating[]
   plexPresence    PlexPresence[]
+  plexEpisodes    PlexEpisodePresence[]
   plexSuppression PlexWatchSuppression[]
 }
 
@@ -242,6 +245,30 @@ model PlexPresence {
   //                        column existed, until the next sync back-fills them.
   updatedAt     DateTime  @updatedAt
 
+  @@index([userId, mediaItemId])
+  @@index([userId])
+}
+
+// Which specific episodes of a tracked show are present in the user's Plex library (Plex integration). Finer
+// grained than PlexPresence, which is per-season: the Download view needs to know exactly which aired episodes
+// you don't yet have — including new episodes missing from a season you already partly own, which season-level
+// presence can't distinguish. Per-user (§5a rule 4 — the user's own library, not shared catalog state).
+//
+// Updated incrementally, unlike PlexPresence's full snapshot: a sync only fetches a show's episode list when its
+// Plex leafCount changed (see scanPlex's presence cursor), so it REPLACES rows only for the shows it re-fetched
+// and drops rows for shows no longer in the library; untouched shows keep their rows. mediaItemId is denormalized
+// so a show's rows can be replaced/queried without a join.
+model PlexEpisodePresence {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodeId   String
+  episode     Episode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, episodeId])
   @@index([userId, mediaItemId])
   @@index([userId])
 }

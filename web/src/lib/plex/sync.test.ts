@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 import type { TmdbClient } from "@/lib/tmdb";
 import type { PlexClient } from "./client";
-import { addPlexItems, applyPresence, applyWatched, scanPlex } from "./sync";
+import { addPlexItems, applyEpisodePresence, applyPresence, applyWatched, scanPlex } from "./sync";
 import { clearEpisodeSuppressions, clearMovieSuppression, suppressWatch } from "./suppression";
 
 const MIGRATION_SQL = readdirSync(join("prisma", "migrations"))
@@ -237,15 +237,31 @@ describe("continuous watched-sync (matched items)", () => {
     expect(await applyWatched(prisma, "owner", r.watchedSignals)).toBe(0);
   });
 
-  it("skips a show's episode fetch when its watched count is unchanged since the last sync", async () => {
+  it("skips a show's episode fetch when neither its watched nor its total episode count changed", async () => {
     await seedShowEpisodes();
-    // Cursor says the tracked show (Plex ratingKey "s1") already had 2 watched episodes last sync — and the fake
-    // still reports viewedLeafCount 2 — so it should be skipped; the movie is not cursor-gated.
-    const r = await scanPlex(deps(), { s1: 2 });
+    // Both cursors match what the fake still reports for the tracked show (ratingKey "s1"): viewedLeafCount 2 and
+    // leafCount 3. So /allLeaves is skipped entirely — no watch signals, no presence refresh; the movie is not
+    // cursor-gated and still yields a signal.
+    const r = await scanPlex(deps(), { s1: 2 }, { s1: 3 });
     expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-show")).toBe(false);
+    expect(r.episodePresence["mi-show"]).toBeUndefined();
     expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-movie")).toBe(true);
-    // The cursor is refreshed with the current totals for the next run.
+    // Both cursors are refreshed with the current totals for the next run.
     expect(r.watchCursor.s1).toBe(2);
+    expect(r.presenceCursor.s1).toBe(3);
+  });
+
+  it("re-fetches a show for presence when its episode count changed even if its watched count did not", async () => {
+    await seedShowEpisodes();
+    // Watched count unchanged (2), but the total episode count moved (prior cursor 2 → now 3) — a new episode
+    // arrived. The fetch runs for presence, and the episodes-present snapshot is populated.
+    const r = await scanPlex(deps(), { s1: 2 }, { s1: 2 });
+    expect(r.episodePresence["mi-show"]).toEqual(
+      expect.arrayContaining([
+        { seasonNumber: 1, episodeNumber: 1 },
+        { seasonNumber: 1, episodeNumber: 2 },
+      ]),
+    );
   });
 
   it("never double-logs an episode already in the log, regardless of source", async () => {
@@ -290,6 +306,72 @@ describe("continuous watched-sync (matched items)", () => {
     await suppressWatch(prisma, "owner", "mi-movie", null);
     await suppressWatch(prisma, "owner", "mi-movie", null);
     expect(await prisma.plexWatchSuppression.count({ where: { userId: "owner" } })).toBe(2);
+  });
+});
+
+describe("episode presence (matched shows)", () => {
+  async function seedShowEpisodes() {
+    await prisma.season.create({ data: { id: "se1", mediaItemId: "mi-show", seasonNumber: 1 } });
+    await prisma.episode.createMany({
+      data: [
+        { id: "ep-s1e1", mediaItemId: "mi-show", seasonId: "se1", seasonNumber: 1, episodeNumber: 1 },
+        { id: "ep-s1e2", mediaItemId: "mi-show", seasonId: "se1", seasonNumber: 1, episodeNumber: 2 },
+      ],
+    });
+  }
+
+  it("scanPlex records episodes present in Plex and a total-leaf presence cursor for matched shows", async () => {
+    await seedShowEpisodes();
+    const r = await scanPlex(deps());
+    expect(r.matchedShowIds).toContain("mi-show");
+    expect(r.presenceCursor.s1).toBe(3); // sum of season leafCounts from getShowSeasons
+    expect(r.episodePresence["mi-show"]).toEqual(
+      expect.arrayContaining([
+        { seasonNumber: 1, episodeNumber: 1 },
+        { seasonNumber: 1, episodeNumber: 2 },
+      ]),
+    );
+  });
+
+  it("applyEpisodePresence resolves season:episode to catalog episodeIds and stores presence", async () => {
+    await seedShowEpisodes();
+    const r = await scanPlex(deps());
+    await applyEpisodePresence(prisma, "owner", r.episodePresence, r.matchedShowIds);
+    const rows = await prisma.plexEpisodePresence.findMany({ where: { userId: "owner", mediaItemId: "mi-show" } });
+    expect(new Set(rows.map((x) => x.episodeId))).toEqual(new Set(["ep-s1e1", "ep-s1e2"]));
+  });
+
+  it("replaces only re-fetched shows and drops rows for shows no longer in the library", async () => {
+    await seedShowEpisodes();
+    // A second tracked show with presence, that will NOT be in this sync's matched set (fell out of Plex).
+    await prisma.mediaItem.create({ data: { id: "mi-other", mediaType: "tv", tmdbId: 500, title: "Other" } });
+    await prisma.season.create({ data: { id: "se-o", mediaItemId: "mi-other", seasonNumber: 1 } });
+    await prisma.episode.create({
+      data: { id: "ep-o1", mediaItemId: "mi-other", seasonId: "se-o", seasonNumber: 1, episodeNumber: 1 },
+    });
+    await prisma.plexEpisodePresence.createMany({
+      data: [
+        { userId: "owner", mediaItemId: "mi-show", episodeId: "ep-s1e1" },
+        { userId: "owner", mediaItemId: "mi-other", episodeId: "ep-o1" },
+      ],
+    });
+
+    // Re-fetch mi-show only (now has just S1E2); mi-other is no longer matched.
+    await applyEpisodePresence(prisma, "owner", { "mi-show": [{ seasonNumber: 1, episodeNumber: 2 }] }, ["mi-show"]);
+
+    const rows = await prisma.plexEpisodePresence.findMany({ where: { userId: "owner" } });
+    expect(rows.map((r) => `${r.mediaItemId}:${r.episodeId}`)).toEqual(["mi-show:ep-s1e2"]);
+  });
+
+  it("keeps rows for a still-matched show that wasn't re-fetched this sync", async () => {
+    await seedShowEpisodes();
+    await prisma.plexEpisodePresence.create({
+      data: { userId: "owner", mediaItemId: "mi-show", episodeId: "ep-s1e1" },
+    });
+    // mi-show is still matched but absent from `refreshed` (its cursor didn't move) — its rows stay untouched.
+    await applyEpisodePresence(prisma, "owner", {}, ["mi-show"]);
+    const rows = await prisma.plexEpisodePresence.findMany({ where: { userId: "owner" } });
+    expect(rows.map((r) => r.episodeId)).toEqual(["ep-s1e1"]);
   });
 });
 

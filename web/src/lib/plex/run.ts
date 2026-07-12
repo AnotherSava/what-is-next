@@ -2,7 +2,14 @@ import { getPrisma } from "@/lib/db";
 import { getSetting, setSetting } from "@/lib/settings";
 import { getTmdb } from "@/lib/tmdb";
 import { getPlex } from "./client";
-import { applyPresence, applyWatched, scanPlex, type PlexSyncDeps, type ScanResult } from "./sync";
+import {
+  applyEpisodePresence,
+  applyPresence,
+  applyWatched,
+  scanPlex,
+  type PlexSyncDeps,
+  type ScanResult,
+} from "./sync";
 
 // App-level Plex sync orchestration (uses the global singletons). Shared by the admin "Sync now" action and
 // the nightly job so presence + the review list are produced identically. Kept out of sync.ts so that module
@@ -20,9 +27,11 @@ export async function syncPlexPresence(
 ): Promise<ScanResult & { importedWatches: number; durationMs: number; presenceChanged: boolean }> {
   const startMs = Date.now();
   const deps = plexDeps(userId);
-  const priorCursor = (await getSetting("plex:watchCursor"))?.shows ?? {};
-  const r = await scanPlex(deps, priorCursor);
+  const priorWatchCursor = (await getSetting("plex:watchCursor"))?.shows ?? {};
+  const priorPresenceCursor = (await getSetting("plex:presenceCursor"))?.shows ?? {};
+  const r = await scanPlex(deps, priorWatchCursor, priorPresenceCursor);
   const presenceChanged = await applyPresence(deps.prisma, userId, r.presenceRows);
+  await applyEpisodePresence(deps.prisma, userId, r.episodePresence, r.matchedShowIds);
   const importedWatches = await applyWatched(deps.prisma, userId, r.watchedSignals);
   const at = new Date().toISOString();
   // Record the server id for watch deep links — best-effort, so a hiccup here never fails the whole sync.
@@ -44,6 +53,7 @@ export async function syncPlexPresence(
   });
   await setSetting("plex:candidates", { at, items: r.candidates });
   await setSetting("plex:watchCursor", { at, shows: r.watchCursor });
+  await setSetting("plex:presenceCursor", { at, shows: r.presenceCursor });
   return { ...r, importedWatches, durationMs, presenceChanged };
 }
 

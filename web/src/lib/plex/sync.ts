@@ -3,7 +3,7 @@ import { hydrateMovieByTmdbId, hydrateShowByTmdbId } from "@/lib/catalog";
 import type { PlexCandidate } from "@/lib/settings";
 import type { TmdbClient } from "@/lib/tmdb";
 import type { PlexClient } from "./client";
-import { parseGuids } from "./schemas";
+import { parseGuids, type PlexEpisode } from "./schemas";
 
 // Plex sync core (Plex integration). Read-only against Plex; writes PlexPresence (full snapshot) + SeenEvent rows
 // (source "plex") for watch state, plus — on explicit add — new UserMediaState rows. Explicit userId (brief §5a
@@ -35,6 +35,13 @@ export interface WatchedSignal {
   watchedAt: Date | null;
 }
 
+// An episode present in a show's Plex library, before catalog resolution — resolved to an episodeId inside
+// applyEpisodePresence, mirroring how WatchedSignal defers its episodeId lookup.
+export interface EpisodePresenceSignal {
+  seasonNumber: number;
+  episodeNumber: number;
+}
+
 export interface ScanResult {
   matchedShows: number;
   matchedMovies: number;
@@ -45,6 +52,15 @@ export interface ScanResult {
   // Per-show cursor: plexRatingKey → total watched-episode count observed this scan. Persisted and fed back on
   // the next sync so an unchanged show skips its /allLeaves fetch entirely (steady-state = zero episode fetches).
   watchCursor: Record<string, number>;
+  // Per-show cursor: plexRatingKey → total episode count (leafCount) observed this scan. Same purpose as the watch
+  // cursor, for the per-episode presence snapshot: an unchanged episode count means presence didn't move.
+  presenceCursor: Record<string, number>;
+  // Every matched TV show's mediaItemId this scan, whether or not its /allLeaves was fetched — lets
+  // applyEpisodePresence drop presence rows for shows that fell out of the library.
+  matchedShowIds: string[];
+  // mediaItemId → the episodes present in Plex, only for shows re-fetched this scan (their leafCount changed).
+  // Other still-matched shows are absent here and keep their existing presence rows.
+  episodePresence: Record<string, EpisodePresenceSignal[]>;
 }
 
 type MediaType = "tv" | "movie";
@@ -81,7 +97,11 @@ async function catalogIndex(prisma: PrismaClient) {
   return idx;
 }
 
-export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, number> = {}): Promise<ScanResult> {
+export async function scanPlex(
+  deps: PlexSyncDeps,
+  watchCursor: Record<string, number> = {},
+  presenceCursor: Record<string, number> = {},
+): Promise<ScanResult> {
   const { prisma, plex } = deps;
   const idx = await catalogIndex(prisma);
   const allow = libraryAllowlist();
@@ -89,6 +109,9 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
   const presenceRows: PresenceRow[] = [];
   const watchedSignals: WatchedSignal[] = [];
   const nextWatchCursor: Record<string, number> = {};
+  const nextPresenceCursor: Record<string, number> = {};
+  const matchedShowIds: string[] = [];
+  const episodePresence: Record<string, EpisodePresenceSignal[]> = {};
   const candidates: PlexCandidate[] = [];
   let matchedShows = 0;
   let matchedMovies = 0;
@@ -111,8 +134,10 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
         const seasons = await plex.getShowSeasons(item.ratingKey);
         const present = seasons.map((s) => s.index);
         const watchedLeaves = seasons.reduce((n, s) => n + (s.viewedLeafCount ?? 0), 0);
+        const totalLeaves = seasons.reduce((n, s) => n + (s.leafCount ?? 0), 0);
         if (match) {
           matchedShows++;
+          matchedShowIds.push(match);
           if (present.length > 0) {
             for (const n of present) {
               presenceRows.push({ mediaItemId: match, seasonNumber: n, plexRatingKey: item.ratingKey });
@@ -121,14 +146,21 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
           } else {
             presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey }); // present, seasons unknown
           }
-          // Continuous watched-sync for this already-tracked show. Skip the per-show /allLeaves fetch unless the
-          // show's total watched-episode count changed since the last sync — so a steady-state sync does zero
-          // episode fetches. The count is free (getShowSeasons is fetched anyway for presence). Trade-off: an
-          // unwatch+watch that nets the same total is missed until the next real change (rare; additive-only
-          // never loses already-imported data).
+          // Continuous watched-sync + per-episode presence for this already-tracked show. Fetch /allLeaves once
+          // when EITHER the show's watched-episode count OR its total episode count changed since the last sync —
+          // that single fetch feeds both the watch import and the presence snapshot, so a steady-state sync (both
+          // counts unchanged) does zero episode fetches. Both counts are free (getShowSeasons is fetched anyway).
+          // Trade-off: a change that nets the same totals (an unwatch+watch, or swapping one file for another) is
+          // missed until the next real move — rare, and presence/watch state are only additively corrected.
           nextWatchCursor[item.ratingKey] = watchedLeaves;
-          if (watchedLeaves > 0 && watchedLeaves !== watchCursor[item.ratingKey])
-            watchedSignals.push(...(await collectShowWatchedSignals(plex, item.ratingKey, match)));
+          nextPresenceCursor[item.ratingKey] = totalLeaves;
+          const watchChanged = watchedLeaves > 0 && watchedLeaves !== watchCursor[item.ratingKey];
+          const presenceChanged = totalLeaves !== presenceCursor[item.ratingKey];
+          if (watchChanged || presenceChanged) {
+            const episodes = await plex.getShowEpisodes(item.ratingKey);
+            watchedSignals.push(...watchedSignalsFromEpisodes(episodes, match));
+            episodePresence[match] = episodePresenceFromEpisodes(episodes);
+          }
         } else if (hasExternalId) {
           candidates.push({
             plexRatingKey: item.ratingKey,
@@ -179,16 +211,14 @@ export async function scanPlex(deps: PlexSyncDeps, watchCursor: Record<string, n
     watchedSignals,
     candidates,
     watchCursor: nextWatchCursor,
+    presenceCursor: nextPresenceCursor,
+    matchedShowIds,
+    episodePresence,
   };
 }
 
-// Read a show's episodes from Plex and turn the watched ones into signals (parentIndex = season, index = episode).
-async function collectShowWatchedSignals(
-  plex: PlexClient,
-  plexRatingKey: string,
-  mediaItemId: string,
-): Promise<WatchedSignal[]> {
-  const episodes = await plex.getShowEpisodes(plexRatingKey);
+// Turn a show's Plex episode list into watched signals — the watched ones (parentIndex = season, index = episode).
+function watchedSignalsFromEpisodes(episodes: PlexEpisode[], mediaItemId: string): WatchedSignal[] {
   const out: WatchedSignal[] = [];
   for (const e of episodes) {
     if ((e.viewCount ?? 0) > 0 && e.parentIndex != null && e.index != null)
@@ -200,6 +230,25 @@ async function collectShowWatchedSignals(
       });
   }
   return out;
+}
+
+// Turn a show's Plex episode list into presence signals — every episode present in the library (season:episode).
+function episodePresenceFromEpisodes(episodes: PlexEpisode[]): EpisodePresenceSignal[] {
+  const out: EpisodePresenceSignal[] = [];
+  for (const e of episodes) {
+    if (e.parentIndex != null && e.index != null) out.push({ seasonNumber: e.parentIndex, episodeNumber: e.index });
+  }
+  return out;
+}
+
+// Read a show's episodes from Plex and turn the watched ones into signals. Used by the freshly-added path, which
+// only needs watch state (per-episode presence for a new add lands on the next full sync, when its cursor is set).
+async function collectShowWatchedSignals(
+  plex: PlexClient,
+  plexRatingKey: string,
+  mediaItemId: string,
+): Promise<WatchedSignal[]> {
+  return watchedSignalsFromEpisodes(await plex.getShowEpisodes(plexRatingKey), mediaItemId);
 }
 
 // The single writer for Plex watch state: resolve each signal to the catalog, skip any already logged OR the user
@@ -295,6 +344,42 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
     });
   }
   return changed;
+}
+
+// Reconcile the per-episode presence snapshot (Plex integration). Incremental, NOT a full snapshot like
+// applyPresence: `refreshed` carries episodes-in-Plex only for the shows re-fetched this sync (their leafCount
+// moved), so only those shows' rows are replaced; every other still-matched show keeps its existing rows. Rows for
+// shows that dropped out of the library entirely (absent from `matchedShowIds`) are removed. season:episode is
+// resolved to a catalog episodeId the same way applyWatched resolves watched signals — a pair the catalog doesn't
+// know is skipped. Idempotent: a re-run with the same inputs deletes and re-inserts the identical rows.
+export async function applyEpisodePresence(
+  prisma: PrismaClient,
+  userId: string,
+  refreshed: Record<string, EpisodePresenceSignal[]>,
+  matchedShowIds: string[],
+): Promise<void> {
+  // Drop presence for shows no longer in the library. Empty matched set = nothing tracked in Plex → clear all.
+  if (matchedShowIds.length === 0) await prisma.plexEpisodePresence.deleteMany({ where: { userId } });
+  else await prisma.plexEpisodePresence.deleteMany({ where: { userId, mediaItemId: { notIn: matchedShowIds } } });
+
+  for (const [mediaItemId, signals] of Object.entries(refreshed)) {
+    const catalog = await prisma.episode.findMany({
+      where: { mediaItemId },
+      select: { id: true, seasonNumber: true, episodeNumber: true },
+    });
+    const byKey = new Map(catalog.map((e) => [`${e.seasonNumber}:${e.episodeNumber}`, e.id]));
+    const episodeIds = [
+      ...new Set(
+        signals.map((s) => byKey.get(`${s.seasonNumber}:${s.episodeNumber}`)).filter((id): id is string => id != null),
+      ),
+    ];
+    // Replace this show's rows: clear the old set, then insert the fresh one.
+    await prisma.plexEpisodePresence.deleteMany({ where: { userId, mediaItemId } });
+    if (episodeIds.length > 0)
+      await prisma.plexEpisodePresence.createMany({
+        data: episodeIds.map((episodeId) => ({ userId, mediaItemId, episodeId })),
+      });
+  }
 }
 
 // Add selected Plex-only titles to your list: hydrate from TMDB, create UserMediaState, import Plex watched

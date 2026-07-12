@@ -72,6 +72,14 @@ const plexWatchCursorSchema = z.object({
   shows: z.record(z.string(), z.number().int()),
 });
 
+// Per-show total-episode-count cursor (Plex integration): plexRatingKey → total leafCount at the last sync. Lets
+// the next sync skip the /allLeaves fetch for episode presence on any show whose library episode count is
+// unchanged — the same steady-state optimisation as the watch cursor, for the Download view's data (see scanPlex).
+const plexPresenceCursorSchema = z.object({
+  at: z.string(),
+  shows: z.record(z.string(), z.number().int()),
+});
+
 // The Plex server's stable machineIdentifier (Plex integration), captured each sync. Combined with a per-item
 // plexRatingKey it builds an app.plex.tv deep link to watch the item. See src/lib/plex/link.ts.
 const plexServerSchema = z.object({ at: z.string(), machineIdentifier: z.string() });
@@ -82,6 +90,7 @@ const SETTING_SCHEMAS = {
   "plex:lastSync": plexLastSyncSchema,
   "plex:candidates": plexCandidatesSchema,
   "plex:watchCursor": plexWatchCursorSchema,
+  "plex:presenceCursor": plexPresenceCursorSchema,
   "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
 } as const;

@@ -23,6 +23,14 @@ export async function getPlexPresenceKeys(userId: string): Promise<Map<string, s
   return map;
 }
 
+// The set of episodeIds the user has present in their Plex library (Plex integration) — the per-episode counterpart
+// of getPlexPresenceKeys. Membership == "this episode is in Plex". Written by the sync's applyEpisodePresence; the
+// Download view checks aired-unwatched episodes against it to find what's missing.
+export async function getPlexEpisodePresence(userId: string): Promise<Set<string>> {
+  const rows = await getPrisma().plexEpisodePresence.findMany({ where: { userId }, select: { episodeId: true } });
+  return new Set(rows.map((r) => r.episodeId));
+}
+
 // Presence for one show in a single query: which seasons are in Plex and the show's ratingKey (for a watch link).
 export async function getShowPlexPresence(
   userId: string,
