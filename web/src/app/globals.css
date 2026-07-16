@@ -245,7 +245,14 @@ input::placeholder {
     stroke 0.18s ease,
     transform 0.3s ease;
 }
-.wn-gear:hover {
+/* Brighten to the active-pill colour on hover, and stay bright while Settings is open. */
+.wn-gear:hover,
+.wn-gear-on {
+  stroke: #fff;
+}
+/* Spin toward the "open" angle on hover; once Settings is open the gear holds that angle instead of unwinding. */
+.wn-gear:not(.wn-gear-on):hover,
+.wn-gear-on {
   transform: rotate(45deg);
 }
 
