@@ -1,4 +1,5 @@
-import { CardMetaRow, CardNextRow, CardTitle, SectionTitle } from "@/app/_components/cardUi";
+import { CardMetaRow, CardTitle, SectionTitle } from "@/app/_components/cardUi";
+import { CardNextRow } from "@/app/_components/CardNextRow";
 import { PosterCard } from "@/app/_components/PosterCard";
 import { getDashboard, type BehindShow, type ReadyMovie } from "@/lib/dashboard";
 import { nowMs } from "@/lib/datetime";
@@ -74,7 +75,7 @@ function ShowCard({
 }) {
   const watchUrl = show.nextUpInPlex ? plexWatchUrl(plexServerId, show.plexRatingKey) : null;
   const lastText = show.lastWatchedAt ? `${formatInterval(now - show.lastWatchedAt.getTime())} ago` : "";
-  const more = show.unwatchedAiredCount > 1 ? `+${show.unwatchedAiredCount - 1} more` : "";
+  const moreCount = show.unwatchedAiredCount - 1;
   return (
     <PosterCard
       mediaType="tv"
@@ -91,7 +92,7 @@ function ShowCard({
       <CardNextRow
         code={`S${show.nextUp.seasonNumber} · E${show.nextUp.episodeNumber}`}
         epTitle={show.nextUp.title}
-        more={more}
+        moreCount={moreCount}
       />
     </PosterCard>
   );

@@ -46,7 +46,7 @@ export default async function ShowsPage() {
         lastText: behind && s.lastWatchedAt ? `${formatInterval(now - s.lastWatchedAt.getTime())} ago` : "",
         nextCode: behind && n ? `S${n.seasonNumber} · E${n.episodeNumber}` : null,
         nextTitle: behind ? s.nextUpTitle : null,
-        more: behind && s.progress.unwatchedAiredCount > 1 ? `+${s.progress.unwatchedAiredCount - 1} more` : "",
+        moreCount: behind ? s.progress.unwatchedAiredCount - 1 : 0,
       };
     });
 

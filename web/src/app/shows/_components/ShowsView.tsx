@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CardNextRow, CardTitle, GroupHeading, PageTitle } from "@/app/_components/cardUi";
+import { CardTitle, GroupHeading, PageTitle } from "@/app/_components/cardUi";
+import { CardNextRow } from "@/app/_components/CardNextRow";
 import { FilterChip, SearchBox } from "@/app/_components/Filters";
 import { PosterCard } from "@/app/_components/PosterCard";
 
@@ -18,7 +19,7 @@ export type ShowCardData = {
   lastText: string;
   nextCode: string | null;
   nextTitle: string | null;
-  more: string;
+  moreCount: number;
 };
 
 // Group order + colours from the design reference (Planned sits before Up to date here).
@@ -48,7 +49,12 @@ export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFa
   const empty = groupsView.length === 0;
 
   const chips = [{ key: "all", label: "All", color: "#8b8b96", count: shows.length }].concat(
-    GROUPS.map((g) => ({ key: g.key, label: g.label, color: g.color, count: shows.filter((s) => s.group === g.key).length })),
+    GROUPS.map((g) => ({
+      key: g.key,
+      label: g.label,
+      color: g.color,
+      count: shows.filter((s) => s.group === g.key).length,
+    })),
   );
 
   return (
@@ -92,7 +98,7 @@ export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFa
                   canFavorite={canFavorite}
                 >
                   <CardTitle title={s.title} aside={s.lastText} />
-                  {s.nextCode && <CardNextRow code={s.nextCode} epTitle={s.nextTitle} more={s.more} />}
+                  {s.nextCode && <CardNextRow code={s.nextCode} epTitle={s.nextTitle} moreCount={s.moreCount} />}
                 </PosterCard>
               ))}
             </div>

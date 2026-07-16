@@ -37,22 +37,6 @@ export function CardTitle({ title, aside }: { title: string; aside?: ReactNode }
   );
 }
 
-// The "next up" row on a show card: an amber episode code, an optional episode title (narrow), and an optional
-// "+N more" pinned right.
-export function CardNextRow({ code, epTitle, more }: { code: string; epTitle?: string | null; more?: ReactNode }) {
-  return (
-    <div className="mt-[3px] flex items-baseline justify-between gap-2">
-      <span className="min-w-0 truncate">
-        <span className="font-num text-[11px] tabular-nums text-[var(--color-behind)]">{code}</span>
-        {epTitle && <span className="font-narrow ml-[9px] text-[13px] text-[var(--color-bright)]">{epTitle}</span>}
-      </span>
-      {more != null && more !== "" && (
-        <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]">{more}</span>
-      )}
-    </div>
-  );
-}
-
 // A generic sub-row: narrow left text (director / season range) with an optional tabular value pinned right.
 export function CardMetaRow({
   left,
