@@ -16,7 +16,10 @@ export interface ReadyMovie {
   releaseDate: string | null; // ISO date; only its year is rendered
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
   imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page
   director: string | null; // director(s), comma-joined — rendered under the title
+  runtime: number | null; // minutes — rendered as "2h 46m" on the card
+  isFavorite: boolean;
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
 }
 
@@ -27,6 +30,7 @@ export interface BehindShow {
   isFavorite: boolean;
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
   imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page
   unwatchedAiredCount: number;
   nextUpInPlex: boolean; // the NEXT-UP episode is in the user's Plex library → can be played right now
   plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (set when the show is in Plex)
@@ -54,7 +58,10 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       releaseDate: m.releaseDate,
       tmdbRating: m.tmdbRating,
       imdbRating: m.imdbRating,
+      imdbId: m.imdbId,
       director: m.director,
+      runtime: m.runtime,
+      isFavorite: m.isFavorite,
       plexRatingKey: m.plexRatingKey,
     }));
 
@@ -92,6 +99,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       isFavorite: s.isFavorite,
       tmdbRating: s.tmdbRating,
       imdbRating: s.imdbRating,
+      imdbId: s.imdbId,
       unwatchedAiredCount: s.progress.unwatchedAiredCount,
       nextUpInPlex: plexEpisodeIds.has(n.id),
       plexRatingKey: s.plexRatingKey,

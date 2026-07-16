@@ -33,10 +33,16 @@ const TITLE: Record<Freshness, string> = {
   stale: "Stale — no Plex sync in a while",
 };
 
-export function FreshnessDot({ lastSyncAt, staleThresholdMs }: { lastSyncAt: string; staleThresholdMs: number }) {
+const LABEL: Record<Freshness, string> = {
+  fresh: "Synced",
+  aging: "Synced",
+  stale: "Stale",
+};
+
+// The self-ticking freshness value, shared by the bare dot and the labelled pill: starts from the sync instant so
+// SSR and first client render agree, then advances to the real clock and re-evaluates as the data ages.
+function useFreshness(lastSyncAt: string, staleThresholdMs: number): Freshness {
   const lastSyncMs = Date.parse(lastSyncAt);
-  // Start from the sync instant (age 0 → green) so SSR and the first client render agree; the effect then advances
-  // to the real clock and keeps it current.
   const [nowMs, setNowMs] = useState(lastSyncMs);
   // Hold green until the on-mount freshen has had time to land, so opening a page that was briefly behind shows
   // green rather than flashing yellow→green when the sync completes. Only reveals a stale colour if it can't.
@@ -51,15 +57,23 @@ export function FreshnessDot({ lastSyncAt, staleThresholdMs }: { lastSyncAt: str
       clearTimeout(settle);
     };
   }, []);
+  return settled ? freshnessOf(nowMs - lastSyncMs, staleThresholdMs) : "fresh";
+}
 
-  const freshness = settled ? freshnessOf(nowMs - lastSyncMs, staleThresholdMs) : "fresh";
+// The nav's sync indicator: the freshness dot with a "Synced"/"Stale" label beside it (design reference).
+export function SyncPill({ lastSyncAt, staleThresholdMs }: { lastSyncAt: string; staleThresholdMs: number }) {
+  const freshness = useFreshness(lastSyncAt, staleThresholdMs);
   return (
     <span
-      role="img"
-      aria-label={TITLE[freshness]}
       title={TITLE[freshness]}
-      className="inline-block h-2 w-2 shrink-0 rounded-full"
-      style={{ backgroundColor: COLOR[freshness] }}
-    />
+      className="flex items-center gap-1.5 font-num text-[11px] tabular-nums text-[var(--color-faint)]"
+    >
+      <span
+        aria-hidden
+        className="h-[7px] w-[7px] shrink-0 rounded-full"
+        style={{ backgroundColor: COLOR[freshness], boxShadow: `0 0 8px ${COLOR[freshness]}` }}
+      />
+      {LABEL[freshness]}
+    </span>
   );
 }

@@ -31,6 +31,14 @@ export function formatSeasonRange(seasons: number[]): string {
   return `${sorted.length === 1 ? "Season" : "Seasons"} ${parts.join(", ")}`;
 }
 
+// A movie runtime in minutes as "2h 46m" (or "46m" under an hour). Null/zero → "" so the card omits it cleanly.
+export function formatRuntime(minutes: number | null | undefined): string {
+  if (!minutes || minutes <= 0) return "";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 // Compact single-unit elapsed interval (largest unit only): "5m" / "3h" / "12d" / "4mo" / "2y". Floors to the
 // unit; clamps to a minimum of "1m" (a sub-minute, zero, or negative interval reads "1m", never "0m"). No seconds.
 // Months use "mo" (two letters) so they never collide with minutes' "m" — case alone (m vs M) is too easy to

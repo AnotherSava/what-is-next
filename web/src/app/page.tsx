@@ -1,182 +1,127 @@
-import Link from "next/link";
-import { EmptyColumn } from "@/app/_components/EmptyColumn";
-import { MovieDirectorLine, MovieRatingLine, MovieTitleLink } from "@/app/_components/MovieText";
-import { PosterPlay } from "@/app/_components/PosterPlay";
-import { MarkWatchedButton } from "@/app/_components/MarkWatchedButton";
-import { Section } from "@/app/_components/Section";
+import { CardMetaRow, CardNextRow, CardTitle, SectionTitle } from "@/app/_components/cardUi";
+import { PosterCard } from "@/app/_components/PosterCard";
 import { getDashboard, type BehindShow, type ReadyMovie } from "@/lib/dashboard";
-import { displayDate, nowMs } from "@/lib/datetime";
-import { formatInterval } from "@/lib/format";
+import { nowMs } from "@/lib/datetime";
+import { formatInterval, formatRuntime } from "@/lib/format";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getMovieRatingsVisibility, getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
+import { getPlexServerId } from "@/lib/settings";
 
-// Home / "Watch next" — the payoff screen (brief §8.1). Two columns of what's playable right now from Plex:
-// Movies (unwatched watchlist titles in your library) on the left, Shows (behind shows whose next-up episode is
-// in your library) on the right. (Behind shows whose next episode isn't in Plex live in the Download view.)
-// Renders the same for viewer and owner; only the shows' one-tap "mark watched" affordance is gated on canEdit.
+// Home / "Watch next" — the payoff screen (brief §8.1), rebuilt as the design reference's poster grids: a "Shows"
+// shelf of behind shows whose next-up episode is in Plex (playable now), then a "Movies" shelf of unwatched
+// watchlist titles present in your library. Behind shows whose next episode isn't in Plex live in the Download view.
 export default async function HomePage() {
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [{ readyMovies, readyInPlex }, manualWatched, plexServerId, ratingsVisibility] = await Promise.all([
+  const [{ readyMovies, readyInPlex }, plexServerId] = await Promise.all([
     getDashboard(displayedUser.id),
-    isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
-    getMovieRatingsVisibility(),
   ]);
-  const canMarkWatched = canEdit && manualWatched; // watched controls are hidden unless the owner enabled them
   const now = nowMs(); // one request-time snapshot for the "N ago" ages (kept out of render — see nowMs)
   const empty = readyMovies.length === 0 && readyInPlex.length === 0;
 
+  if (empty) {
+    return (
+      <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
+        {canEdit
+          ? "Nothing ready to watch in Plex right now — check Download for episodes to grab."
+          : "Nothing ready to watch in Plex right now."}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Watch next</h1>
+    <div className="space-y-10">
+      {readyInPlex.length > 0 && (
+        <section>
+          <div className="mb-4">
+            <SectionTitle>Shows</SectionTitle>
+          </div>
+          <div className="wn-grid">
+            {readyInPlex.map((s) => (
+              <ShowCard key={s.showId} show={s} plexServerId={plexServerId} now={now} canEdit={canEdit} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      {empty ? (
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
-          {canEdit
-            ? "Nothing ready to watch in Plex right now — check Download for episodes to grab."
-            : "Nothing ready to watch in Plex right now."}
-        </div>
-      ) : (
-        // Movies left, Shows right; stacks with Movies first on narrow screens.
-        <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
-          <Section title="Movies" count={readyMovies.length}>
-            {readyMovies.length > 0 ? (
-              <ul className="space-y-2">
-                {readyMovies.map((m) => (
-                  <MovieRow
-                    key={m.movieId}
-                    movie={m}
-                    plexServerId={plexServerId}
-                    showTmdb={ratingsVisibility.tmdb}
-                    showImdb={ratingsVisibility.imdb}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <EmptyColumn>No movies ready in Plex right now.</EmptyColumn>
-            )}
-          </Section>
-
-          <Section title="Shows" count={readyInPlex.length}>
-            {readyInPlex.length > 0 ? (
-              <ul className="space-y-2">
-                {readyInPlex.map((s) => (
-                  <BehindRow
-                    key={s.showId}
-                    show={s}
-                    canMarkWatched={canMarkWatched}
-                    plexServerId={plexServerId}
-                    now={now}
-                    showTmdb={ratingsVisibility.tmdb}
-                    showImdb={ratingsVisibility.imdb}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <EmptyColumn>No shows ready in Plex right now.</EmptyColumn>
-            )}
-          </Section>
-        </div>
+      {readyMovies.length > 0 && (
+        <section>
+          <div className="mb-4">
+            <SectionTitle>Movies</SectionTitle>
+          </div>
+          <div className="wn-grid">
+            {readyMovies.map((m) => (
+              <MovieCard key={m.movieId} movie={m} plexServerId={plexServerId} canEdit={canEdit} />
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-function MovieRow({
-  movie,
+function ShowCard({
+  show,
   plexServerId,
-  showTmdb,
-  showImdb,
+  now,
+  canEdit,
 }: {
-  movie: ReadyMovie;
+  show: BehindShow;
   plexServerId: string | null;
-  showTmdb: boolean;
-  showImdb: boolean;
+  now: number;
+  canEdit: boolean;
 }) {
-  const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
+  const watchUrl = show.nextUpInPlex ? plexWatchUrl(plexServerId, show.plexRatingKey) : null;
+  const lastText = show.lastWatchedAt ? `${formatInterval(now - show.lastWatchedAt.getTime())} ago` : "";
+  const more = show.unwatchedAiredCount > 1 ? `+${show.unwatchedAiredCount - 1} more` : "";
   return (
-    <li className="flex items-stretch gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <PosterPlay path={movie.posterPath} alt={movie.title} width={48} height={72} size="w185" watchUrl={watchUrl} />
-      {/* Title + director pinned to the top, ratings to the bottom (matches the /movies card). */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
-        <div className="min-w-0">
-          <MovieTitleLink movieId={movie.movieId} title={movie.title} releaseDate={movie.releaseDate} />
-          <MovieDirectorLine director={movie.director} />
-        </div>
-        <MovieRatingLine
-          tmdbRating={movie.tmdbRating}
-          imdbRating={movie.imdbRating}
-          showTmdb={showTmdb}
-          showImdb={showImdb}
-        />
-      </div>
-    </li>
+    <PosterCard
+      mediaType="tv"
+      id={show.showId}
+      title={show.title}
+      posterPath={show.posterPath}
+      detailHref={`/shows/${show.showId}`}
+      watchUrl={watchUrl}
+      rating={show.imdbRating}
+      isFavorite={show.isFavorite}
+      canFavorite={canEdit}
+    >
+      <CardTitle title={show.title} aside={lastText} />
+      <CardNextRow
+        code={`S${show.nextUp.seasonNumber} · E${show.nextUp.episodeNumber}`}
+        epTitle={show.nextUp.title}
+        more={more}
+      />
+    </PosterCard>
   );
 }
 
-function episodeLabel(seasonNumber: number, episodeNumber: number): string {
-  return `S${seasonNumber} · E${episodeNumber}`;
-}
-
-function BehindRow({
-  show,
-  canMarkWatched,
+function MovieCard({
+  movie,
   plexServerId,
-  now,
-  showTmdb,
-  showImdb,
+  canEdit,
 }: {
-  show: BehindShow;
-  canMarkWatched: boolean;
+  movie: ReadyMovie;
   plexServerId: string | null;
-  now: number;
-  showTmdb: boolean;
-  showImdb: boolean;
+  canEdit: boolean;
 }) {
-  // Play button only when the NEXT-UP episode is in Plex (i.e. the "Watch right now" rows) — a behind show whose
-  // show is in Plex but whose next episode isn't shouldn't offer a "watch now" affordance.
-  const watchUrl = show.nextUpInPlex ? plexWatchUrl(plexServerId, show.plexRatingKey) : null;
+  const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);
+  const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <PosterPlay path={show.posterPath} alt={show.title} width={48} height={72} size="w185" watchUrl={watchUrl} />
-      {/* Title + next-up pinned to the top, ratings to the bottom (matches the movie card). */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between self-stretch py-0.5">
-        <div className="min-w-0">
-          <Link href={`/shows/${show.showId}`} className="block truncate font-medium hover:underline">
-            {show.title}
-          </Link>
-          <p className="truncate text-sm text-[var(--color-behind)]">
-            {episodeLabel(show.nextUp.seasonNumber, show.nextUp.episodeNumber)}
-            {show.nextUp.title && <span className="ml-2 text-[var(--color-muted)]">{show.nextUp.title}</span>}
-          </p>
-        </div>
-        <MovieRatingLine
-          tmdbRating={show.tmdbRating}
-          imdbRating={show.imdbRating}
-          showTmdb={showTmdb}
-          showImdb={showImdb}
-        />
-      </div>
-      {(show.isFavorite || show.lastWatchedAt || show.unwatchedAiredCount > 1) && (
-        // Spread down the card height: favorite ♥ on top, last-watched in the middle, "+N more" on the bottom.
-        <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-xs text-[var(--color-muted)]">
-          {/* Read-only badge only — favoriting happens on the show page, so the empty ♡ never shows in lists. */}
-          <span className="text-xl leading-none text-[var(--color-behind)]">{show.isFavorite ? "♥" : ""}</span>
-          <span>
-            {show.lastWatchedAt && (
-              <span title={`Last watched ${displayDate(show.lastWatchedAt)}`}>
-                {formatInterval(now - show.lastWatchedAt.getTime())} ago
-              </span>
-            )}
-          </span>
-          <span className="opacity-60">
-            {show.unwatchedAiredCount > 1 ? `+${show.unwatchedAiredCount - 1} more` : ""}
-          </span>
-        </div>
-      )}
-      {canMarkWatched && <MarkWatchedButton episodeId={show.nextUp.episodeId} label="Watched" />}
-    </li>
+    <PosterCard
+      mediaType="movie"
+      id={movie.movieId}
+      title={movie.title}
+      posterPath={movie.posterPath}
+      detailHref={`/movies/${movie.movieId}`}
+      watchUrl={watchUrl}
+      rating={movie.imdbRating}
+      isFavorite={movie.isFavorite}
+      canFavorite={canEdit}
+    >
+      <CardTitle title={movie.title} aside={year} />
+      <CardMetaRow left={movie.director ?? ""} right={formatRuntime(movie.runtime)} />
+    </PosterCard>
   );
 }

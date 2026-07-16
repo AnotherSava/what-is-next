@@ -1,23 +1,41 @@
 @import "tailwindcss";
 
-/* Dark theme by default (brief §8), mobile-first. A small design-token layer over Tailwind so pages compose
-   from consistent surfaces/accents instead of ad-hoc greys. Extend here, not inline, as the UI grows. */
+/* Dark theme by default (brief §8), mobile-first. A small design-token layer over Tailwind so pages compose from
+   consistent surfaces/accents instead of ad-hoc greys. Palette + type follow the "What's next" design reference
+   (poster-grid app): a near-black radial ground, #121216 cards, and a four-family type system. Extend here. */
 @theme {
-  --color-bg: #0a0a0b;
-  --color-surface: #141417;
+  --color-bg: #08080a;
+  --color-surface: #121216;
   --color-surface-2: #1c1c21;
-  --color-border: #2a2a31;
+  --color-elevated: #0e0e11; /* inset fields (search, editors) sit below the surface */
+  --color-border: #26262e;
+  --color-border-hover: #34343e;
   --color-text: #ededf0;
-  --color-muted: #9a9aa6;
-  --color-accent: #6d8bff;
+  --color-bright: #c4c4cc; /* secondary text a notch brighter than muted */
+  --color-muted: #8b8b96;
+  --color-faint: #5c5c66; /* meta / years / counts */
+  --color-accent: #7d95ff;
   --color-accent-strong: #4f6ef7;
+  --color-accent-soft: #b9c4ff;
   --color-behind: #f5a524;
+  --color-plex: #e5a00d;
   --color-good: #37b26b;
   --color-bad: #e5484d;
+
+  /* Type families — loaded by next/font (see layout.tsx), referenced here as Tailwind font utilities:
+     font-sans (body, default), font-display (titles/headings), font-narrow (episode/director sub), font-num (meta). */
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-space), ui-sans-serif, system-ui, sans-serif;
+  --font-narrow: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-num: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
   color-scheme: dark;
+}
+
+html {
+  scrollbar-gutter: stable;
 }
 
 html,
@@ -27,20 +45,223 @@ body {
 }
 
 body {
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    Helvetica,
-    Arial,
-    "Apple Color Emoji",
-    "Segoe UI Emoji";
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Radial ground from the reference — a faint lift at the top that falls to near-black. Fixed so it spans scroll. */
+  background: radial-gradient(150% 90% at 50% 0%, #101014 0%, #08080a 58%) no-repeat fixed;
 }
 
-a {
-  color: inherit;
+/* In @layer base so Tailwind's (layered) text-color utilities still win on <a> — an unlayered `a { color: inherit }`
+   would override e.g. `text-[var(--color-muted)]` on nav links, forcing every link to the body colour. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+input {
+  font-family: inherit;
+}
+input::placeholder {
+  color: var(--color-faint);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-2);
+  border-radius: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   Poster-grid primitives (ported from the design reference's .wn-* classes).
+   Components apply these class names alongside their inline/Tailwind styles so
+   hover/transition behaviour lives in one place and can't drift between views.
+   --------------------------------------------------------------------------- */
+
+/* The density-controlled poster grid. --wn-cols is set by the grid-density slider (GridDensity provider). */
+.wn-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--wn-cols, 5), minmax(0, 1fr));
+  gap: 18px;
+}
+
+.wn-card {
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.wn-card:hover {
+  border-color: var(--color-border-hover);
+}
+
+.wn-poster {
+  transition: transform 0.18s ease;
+}
+.wn-posterwrap:hover .wn-poster {
+  transform: scale(1.03);
+}
+
+/* Favourite heart — filled (favourited) always shows; the empty outline appears on card hover only. */
+.wn-heart {
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    opacity 0.12s ease;
+}
+.wn-heart:hover {
+  transform: scale(1.18);
+}
+.wn-heart.fav0 {
+  opacity: 0;
+}
+.wn-posterwrap:hover .wn-heart.fav0 {
+  opacity: 1;
+}
+
+/* Play overlay — big centred triangle on a dark scrim, revealed on hover for in-Plex (playable) items. */
+.wn-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 2;
+  background: rgba(8, 8, 10, 0.44);
+}
+.wn-posterwrap:hover .wn-play-overlay {
+  opacity: 1;
+}
+
+/* Download-source menu — stacked source buttons revealed over the poster on hover (Download view). */
+.wn-dlmenu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  background: rgba(8, 8, 10, 0.72);
+  z-index: 2;
+  padding: 14px;
+}
+.wn-posterwrap:hover .wn-dlmenu {
+  opacity: 1;
+}
+.wn-dlopt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: rgba(125, 149, 255, 0.18);
+  border: 1px solid rgba(125, 149, 255, 0.45);
+  border-radius: 9px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: background 0.13s;
+  text-align: center;
+}
+.wn-dlopt:hover {
+  background: rgba(125, 149, 255, 0.34);
+}
+
+/* Filter chips (status / type filters above a grid). */
+.wn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted);
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.wn-chip:hover {
+  color: var(--color-text);
+}
+.wn-chip[data-on="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: #3a3a44;
+}
+
+/* Buttons (settings actions, source editor). */
+.wn-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent-soft);
+  background: rgba(125, 149, 255, 0.1);
+  border: 1px solid rgba(125, 149, 255, 0.32);
+  border-radius: 9px;
+  padding: 8px 15px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.12s,
+    box-shadow 0.15s;
+}
+.wn-btn:hover {
+  background: rgba(125, 149, 255, 0.22);
+  border-color: var(--color-accent);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -8px rgba(125, 149, 255, 0.6);
+}
+.wn-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Nav items. */
+.wn-nav {
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  cursor: pointer;
+}
+.wn-nav:not(.wn-nav-on):hover {
+  box-shadow: inset 0 0 0 1px #3a3f52;
+}
+.wn-gear {
+  transition:
+    stroke 0.18s ease,
+    transform 0.3s ease;
+}
+.wn-gear:hover {
+  transform: rotate(45deg);
+}
+
+/* Grid-density control — the slider is hidden until the grid icon is hovered. */
+.wn-zoom-panel {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.wn-zoom:hover .wn-zoom-panel {
+  opacity: 1;
+  pointer-events: auto;
+}
+.wn-zoom-trigger {
+  transition: stroke 0.15s ease;
+}
+.wn-zoom:hover .wn-zoom-trigger {
+  stroke: var(--color-text);
 }

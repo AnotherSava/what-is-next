@@ -12,8 +12,45 @@ import { ACTION_BUTTON_CLASS } from "./buttonStyle";
 
 const EMPTY: DownloadSource = { label: "", template: "", movies: true, shows: false };
 
+// Compact label-input padding matching the design reference (padding: 4px 8px). Kept separate from FIELD_CLASS
+// (used by the taller URL textarea).
+const LABEL_INPUT_PADDING = "4px 8px";
+// The edit label input is pulled LEFT by its own padding+border (8px + 1px = 9px) so its TEXT starts exactly where a
+// read row's plain label text does. Vertical alignment is handled by ROW_MIN_HEIGHT instead (see below).
+const INPUT_PULL_X = 9;
+// Vertical padding on both read and edit rows. 9px so the edit box's highlight has the SAME gap above the label
+// input as it does to its left (also 9px) — symmetric background padding around the input box.
+const ROW_PAD_Y = 9;
+// A fixed top-line height for BOTH read and edit rows (≥ the label input's height). The read row's height is
+// otherwise driven by its URL column and the edit row's by its input, so without a shared height the label centers
+// at a different y and appears to jump when editing. Pinning both keeps the label + pills at the same y.
+const ROW_MIN_HEIGHT = 30;
+
 const FIELD_CLASS =
-  "min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-accent)]";
+  "min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-accent)]";
+
+// Shared row grid so the label and the Movies/Shows pills sit in the SAME place whether a row is read-only or being
+// edited. INLINE styles (not Tailwind arbitrary classes) so the alignment can't be broken by a stale CSS rebuild —
+// the exact column geometry must match byte-for-byte between the read and edit rows.
+const ROW_GRID_STYLE: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "150px 118px minmax(0,1fr) auto",
+  columnGap: 14,
+  alignItems: "center",
+  minHeight: ROW_MIN_HEIGHT,
+};
+// The edit row's highlight box extends 10px each side; its 18px padding pulls the inner grid back to the read rows'
+// left edge (read rows sit at px-2 = 8px; -10 + 18 = 8), so read↔edit content columns line up exactly.
+const EDIT_BOX_STYLE: React.CSSProperties = {
+  marginLeft: -10,
+  marginRight: -10,
+  paddingTop: ROW_PAD_Y,
+  paddingBottom: ROW_PAD_Y,
+  paddingLeft: 18,
+  paddingRight: 18,
+  borderRadius: 10,
+  background: "rgba(125,149,255,0.05)",
+};
 
 // The row currently open in the form: its slot (an existing index, or list length for a new row) plus a working
 // copy so Cancel can discard it without touching the saved list.
@@ -95,7 +132,7 @@ export function DownloadSourcesEditor({ sources }: { sources: DownloadSource[] }
         <button
           type="button"
           onClick={() => setEditing({ index: list.length, draft: { ...EMPTY } })}
-          className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-2)]"
+          className={ACTION_BUTTON_CLASS}
         >
           Add source
         </button>
@@ -116,58 +153,67 @@ function ReadRow({
   onDelete: () => void;
   disabled: boolean;
 }) {
+  // Structure mirrors EditRow exactly (li > div.grid) so the top line has identical geometry in both states and the
+  // label + pills stay at the same x AND y when editing.
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-[var(--color-surface-2)]/40 px-3 py-2">
-      <span className="font-medium">{sourceLabel(row)}</span>
-      <span className="flex items-center gap-3 text-xs text-[var(--color-muted)]">
-        <ReadCheck checked={row.movies} label="Movies" />
-        <ReadCheck checked={row.shows} label="Shows" />
-      </span>
-      <code
-        className="min-w-0 flex-1 basis-48 truncate font-mono text-xs text-[var(--color-muted)]"
-        title={row.template}
-      >
-        {row.template}
-      </code>
-      <div className="ml-auto flex items-center gap-1">
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={disabled}
-          title="Edit"
-          aria-label="Edit source"
-          className="rounded-md p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-accent)] disabled:opacity-40"
-        >
-          <PenIcon />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={disabled}
-          title="Delete"
-          aria-label="Delete source"
-          className="rounded-md p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-behind)] disabled:opacity-40"
-        >
-          <XIcon />
-        </button>
+    <li
+      style={{ paddingTop: ROW_PAD_Y, paddingBottom: ROW_PAD_Y }}
+      className="rounded-md border-b border-[#1c1c22] px-2 hover:bg-[rgba(255,255,255,0.025)]"
+    >
+      <div style={ROW_GRID_STYLE}>
+        <span className="truncate text-sm font-semibold">{sourceLabel(row)}</span>
+        <span className="flex items-center gap-1.5">
+          <StatePill active={row.movies} label="Movies" />
+          <StatePill active={row.shows} label="Shows" />
+        </span>
+        <code className="min-w-0 truncate font-mono text-xs text-[var(--color-faint)]" title={row.template}>
+          {row.template}
+        </code>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={disabled}
+            title="Edit"
+            aria-label="Edit source"
+            className="rounded-md p-1.5 text-[var(--color-faint)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] disabled:opacity-40"
+          >
+            <PenIcon />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={disabled}
+            title="Delete"
+            aria-label="Delete source"
+            className="rounded-md p-1.5 text-[var(--color-faint)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-behind)] disabled:opacity-40"
+          >
+            <XIcon />
+          </button>
+        </div>
       </div>
     </li>
   );
 }
 
-// A non-interactive checkbox that just shows a source's movie/show selection in the read-only row.
-function ReadCheck({ checked, label }: { checked: boolean; label: string }) {
+// A Movies/Shows scope pill (design reference): accent-tinted when the source targets that card kind, muted when
+// not. Static in the read-only row; pass `onClick` to make it a toggle in the edit form.
+function StatePill({ active, label, onClick }: { active: boolean; label: string; onClick?: () => void }) {
+  const className = "rounded-[5px] px-2 py-0.5 text-[11px] font-semibold";
+  const style = active
+    ? { color: "#b9c4ff", background: "rgba(125,149,255,0.14)" }
+    : { color: "#3a3a44", background: "transparent" };
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${className} cursor-pointer`} style={style} aria-pressed={active}>
+        {label}
+      </button>
+    );
+  }
   return (
-    <label className="flex items-center gap-1.5">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled
-        readOnly
-        className="h-4 w-4 accent-[var(--color-accent-strong)]"
-      />
+    <span className={className} style={style}>
       {label}
-    </label>
+    </span>
   );
 }
 
@@ -221,61 +267,56 @@ function EditRow({
   pending: boolean;
 }) {
   return (
-    <li className="space-y-2 rounded-md bg-[var(--color-surface-2)]/40 p-2">
-      <textarea
-        value={draft.template}
-        onChange={(e) => patch({ template: e.target.value })}
-        placeholder="https://example.com/search?nm={query}"
-        spellCheck={false}
-        rows={3}
-        className={`${FIELD_CLASS} w-full resize-y font-mono text-xs leading-relaxed`}
-        aria-label="Source URL template"
-      />
-      <div className="flex flex-wrap items-center gap-2">
+    // The highlight box widens outward while its padding pulls the inner content back to the read rows' left edge,
+    // so the top line lines up with the read rows above/below. Inline styles → immune to stale CSS rebuilds. py-2
+    // matches the read rows' vertical padding so the top line starts at the same y.
+    <li style={EDIT_BOX_STYLE}>
+      {/* Top line — same grid + min-height as the read row, so the label + pills don't move (x or y) when editing. */}
+      <div style={ROW_GRID_STYLE}>
         <input
           type="text"
           value={draft.label}
           onChange={(e) => patch({ label: e.target.value })}
           placeholder="Label"
-          className={`${FIELD_CLASS} w-28`}
+          // Compact padding (reference) + a left pull by its own padding+border so its TEXT lands exactly on the
+          // read label's position.
+          style={{ padding: LABEL_INPUT_PADDING, marginLeft: -INPUT_PULL_X }}
+          className={`${FIELD_CLASS} w-full text-sm font-semibold`}
           aria-label="Source label"
         />
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={draft.movies}
-            onChange={(e) => patch({ movies: e.target.checked })}
-            className="h-4 w-4 accent-[var(--color-accent-strong)]"
-          />
-          Movies
-        </label>
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={draft.shows}
-            onChange={(e) => patch({ shows: e.target.checked })}
-            className="h-4 w-4 accent-[var(--color-accent-strong)]"
-          />
-          Shows
-        </label>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-text)] disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={pending || !draft.template.trim()}
-            className={ACTION_BUTTON_CLASS}
-          >
-            {pending ? "Saving…" : "Save"}
-          </button>
-        </div>
+        <span className="flex items-center gap-1.5">
+          <StatePill active={draft.movies} label="Movies" onClick={() => patch({ movies: !draft.movies })} />
+          <StatePill active={draft.shows} label="Shows" onClick={() => patch({ shows: !draft.shows })} />
+        </span>
+        <span />
+        <span />
+      </div>
+      <textarea
+        value={draft.template}
+        onChange={(e) => patch({ template: e.target.value })}
+        placeholder="https://example.com/search?nm={query}"
+        spellCheck={false}
+        rows={5}
+        // Explicit width that overhangs the content box by INPUT_PULL_X on each side, then a left pull of the same
+        // amount — so the textarea's left edge lines up with the label input and its right edge leaves the SAME gap
+        // to the box as the left (symmetric). `w-full` alone would only reach the content edge → uneven right gap.
+        style={{ width: `calc(100% + ${2 * INPUT_PULL_X}px)`, marginLeft: -INPUT_PULL_X }}
+        className={`${FIELD_CLASS} mt-2.5 resize-y font-mono text-xs leading-relaxed`}
+        aria-label="Source URL template"
+      />
+      <div className="mt-2.5 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="wn-btn font-display disabled:opacity-50"
+          style={{ background: "transparent", borderColor: "#34343e", color: "var(--color-muted)" }}
+        >
+          Cancel
+        </button>
+        <button type="button" onClick={onSave} disabled={pending || !draft.template.trim()} className={ACTION_BUTTON_CLASS}>
+          {pending ? "Saving…" : "Save"}
+        </button>
       </div>
     </li>
   );

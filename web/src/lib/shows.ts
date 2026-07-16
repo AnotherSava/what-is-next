@@ -24,10 +24,13 @@ export interface ShowSummary {
   isFavorite: boolean;
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
   imdbRating: number | null; // IMDb community score (0–10), fetched from OMDb; null when unresolved
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page; null when unresolved
   progress: ShowProgress;
   group: DisplayGroup;
   inPlex: boolean;
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+  nextUpTitle: string | null; // title of progress.nextUp (the next episode to watch), or null when up to date
+  lastWatchedAt: Date | null; // most recent episode watch (any source), or null when nothing dated/watched
 }
 
 const EPISODE_SELECT = {
@@ -36,20 +39,32 @@ const EPISODE_SELECT = {
   episodeNumber: true,
   isSpecial: true,
   releaseDate: true,
+  title: true,
 } as const;
 
-async function seenEpisodesByItem(userId: string): Promise<Map<string, { episodeId: string | null }[]>> {
+async function seenEpisodesByItem(
+  userId: string,
+): Promise<Map<string, { episodeId: string | null; watchedAt: Date | null }[]>> {
   const seen = await getPrisma().seenEvent.findMany({
     where: { userId, episodeId: { not: null } },
-    select: { episodeId: true, mediaItemId: true },
+    select: { episodeId: true, mediaItemId: true, watchedAt: true },
   });
-  const byItem = new Map<string, { episodeId: string | null }[]>();
+  const byItem = new Map<string, { episodeId: string | null; watchedAt: Date | null }[]>();
   for (const s of seen) {
     const arr = byItem.get(s.mediaItemId);
-    if (arr) arr.push({ episodeId: s.episodeId });
-    else byItem.set(s.mediaItemId, [{ episodeId: s.episodeId }]);
+    if (arr) arr.push({ episodeId: s.episodeId, watchedAt: s.watchedAt });
+    else byItem.set(s.mediaItemId, [{ episodeId: s.episodeId, watchedAt: s.watchedAt }]);
   }
   return byItem;
+}
+
+// The most recent watchedAt among a show's seen episodes (undated watches ignored), or null if none is dated.
+function latestWatchedAt(seen: { watchedAt: Date | null }[]): Date | null {
+  let latest: Date | null = null;
+  for (const s of seen) {
+    if (s.watchedAt && (!latest || s.watchedAt > latest)) latest = s.watchedAt;
+  }
+  return latest;
 }
 
 export async function getFollowedShows(userId: string, today: string = todayISO()): Promise<ShowSummary[]> {
@@ -65,13 +80,17 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
 
   return states
     .map((st) => {
+      const seen = seenByItem.get(st.mediaItemId) ?? [];
       const progress = computeShowProgress({
         episodes: st.mediaItem.episodes,
-        seenEvents: seenByItem.get(st.mediaItemId) ?? [],
+        seenEvents: seen,
         airingStatus: st.mediaItem.status,
         todayISO: today,
       });
       const group = displayGroup(st.wantToWatch, progress);
+      const nextUpTitle = progress.nextUp
+        ? (st.mediaItem.episodes.find((e) => e.id === progress.nextUp!.id)?.title ?? null)
+        : null;
       return {
         id: st.mediaItem.id,
         title: st.mediaItem.title,
@@ -80,11 +99,14 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         isFavorite: st.isFavorite,
         tmdbRating: st.mediaItem.tmdbRating,
         imdbRating: st.mediaItem.imdbRating,
+        imdbId: st.mediaItem.imdbId,
         progress,
         // A favorite is a strong "keep this around", so it's never hidden — a favorited off-list show shows as Planned.
         group: group === "off-list" && st.isFavorite ? "planned" : group,
         inPlex: plexShows.has(st.mediaItemId),
         plexRatingKey: plexShows.get(st.mediaItemId) ?? null,
+        nextUpTitle,
+        lastWatchedAt: latestWatchedAt(seen),
       };
     })
     .filter((s) => s.group !== "off-list"); // not wanted and nothing watched — the default no-opinion state

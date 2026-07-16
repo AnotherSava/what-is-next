@@ -1,84 +1,55 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Poster } from "@/app/_components/Poster";
-import { displayDate } from "@/lib/datetime";
-import { getRecentWatches, type RecentWatch } from "@/lib/recent";
-import { getDisplayedUser } from "@/lib/session";
+import { nowMs } from "@/lib/datetime";
+import { formatRuntime } from "@/lib/format";
+import { getRecentTimeline, type TimelineItem } from "@/lib/recent";
+import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
+import { RecentView, type RecentCard, type RecentPeriodData } from "./_components/RecentView";
 
 export const metadata: Metadata = { title: "Recently watched" };
 
-function epCode(season: number | null, episode: number | null): string {
-  if (season == null || episode == null) return "";
-  return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
-}
-
-function shortDate(d: Date | null): string {
-  return d ? displayDate(d) : "date unknown";
-}
-
-// Where a watch came from — shown as a small tag so the feed makes its provenance explicit.
-function sourceLabel(source: string): string {
-  return source === "plex" ? "Plex" : source === "tvtime-import" ? "TV Time" : "App";
+function toCard(it: TimelineItem): RecentCard {
+  const rating = it.imdbRating;
+  if (it.kind === "episode") {
+    const epRange = it.fullSeason
+      ? ""
+      : it.epCount <= 1
+        ? `Episode ${it.epFirst}`
+        : `Episodes ${it.epFirst}–${it.epLast}`;
+    return {
+      kind: "episode",
+      key: it.key,
+      id: it.mediaItemId,
+      title: it.title,
+      posterPath: it.posterPath,
+      rating,
+      isFavorite: it.isFavorite,
+      seasonLabel: `Season ${it.seasonNumber}`,
+      epRange,
+    };
+  }
+  return {
+    kind: "movie",
+    key: it.key,
+    id: it.mediaItemId,
+    title: it.title,
+    posterPath: it.posterPath,
+    rating,
+    isFavorite: it.isFavorite,
+    year: it.releaseDate ? it.releaseDate.slice(0, 4) : "",
+    director: it.director ?? "",
+    runtime: formatRuntime(it.runtime),
+  };
 }
 
 export default async function RecentPage() {
-  const displayedUser = await getDisplayedUser();
-  const watches = await getRecentWatches(displayedUser.id);
+  const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
+  const { canEdit } = permissionsFor(sessionUser, displayedUser);
+  const timeline = await getRecentTimeline(displayedUser.id, nowMs());
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Recently watched</h1>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">Your watch history — newest first, tagged by source.</p>
-      </div>
+  const periods: RecentPeriodData[] = timeline.map((p) => ({
+    period: p.period,
+    items: p.items.map((it) => toCard(it)),
+  }));
 
-      {watches.length === 0 ? (
-        <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
-          No watch history yet.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {watches.map((w) => (
-            <RecentRow key={w.id} watch={w} />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function RecentRow({ watch }: { watch: RecentWatch }) {
-  const href = watch.mediaType === "tv" ? `/shows/${watch.mediaItemId}` : "/movies";
-  const code = epCode(watch.seasonNumber, watch.episodeNumber);
-  const isPlex = watch.source === "plex";
-  return (
-    <li className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
-      <Link href={href} className="shrink-0">
-        <Poster path={watch.posterPath} alt={watch.title} width={48} height={72} size="w185" />
-      </Link>
-      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
-        <div className="flex items-start justify-between gap-2">
-          <Link href={href} className="truncate font-medium hover:underline">
-            {watch.title}
-          </Link>
-          <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-              isPlex ? "bg-[#e5a00d] text-black" : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
-            }`}
-          >
-            {sourceLabel(watch.source)}
-          </span>
-        </div>
-        <div>
-          {watch.kind === "episode" && (
-            <p className="truncate text-xs text-[var(--color-muted)]">
-              {code}
-              {watch.episodeTitle ? ` · ${watch.episodeTitle}` : ""}
-            </p>
-          )}
-          <p className="text-xs text-[var(--color-muted)]">Watched {shortDate(watch.watchedAt)}</p>
-        </div>
-      </div>
-    </li>
-  );
+  return <RecentView periods={periods} canFavorite={canEdit} />;
 }

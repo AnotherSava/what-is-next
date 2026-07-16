@@ -19,6 +19,7 @@ export interface DownloadShow {
   isFavorite: boolean;
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
   imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page
   missingCount: number; // aired, unwatched episodes not in Plex — the ones to grab
   lastWatchedAt: Date | null; // most recent watch (started shows); null when not started or all watches undated
   missingSeasons: number[]; // seasons (numbers, sorted) with ≥1 aired episode not in Plex yet — the ones to download
@@ -33,7 +34,10 @@ export interface DownloadMovie {
   releaseDate: string | null; // ISO date; only its year is rendered
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
   imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page
   director: string | null; // director(s), comma-joined — rendered under the title
+  runtime: number | null; // minutes — rendered as "2h 46m" on the card
+  isFavorite: boolean;
 }
 
 // The show side of the Download view — the three buckets classifyDownloads produces (kept separate so that pure
@@ -101,7 +105,10 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
       releaseDate: m.releaseDate,
       tmdbRating: m.tmdbRating,
       imdbRating: m.imdbRating,
+      imdbId: m.imdbId,
       director: m.director,
+      runtime: m.runtime,
+      isFavorite: m.isFavorite,
     }));
 
   const started = shows.filter((s) => s.group === "behind");
@@ -168,6 +175,7 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
       isFavorite: s.isFavorite,
       tmdbRating: s.tmdbRating,
       imdbRating: s.imdbRating,
+      imdbId: s.imdbId,
       missingCount: missing.length,
       lastWatchedAt: ms != null ? new Date(ms) : null,
       missingSeasons,

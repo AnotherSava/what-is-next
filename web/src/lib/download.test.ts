@@ -79,6 +79,7 @@ describe("classifyDownloads", () => {
     isFavorite: false,
     tmdbRating: null,
     imdbRating: null,
+    imdbId: null,
     missingCount,
     lastWatchedAt: lastWatchedAt ? new Date(lastWatchedAt) : null,
     missingSeasons: [],

@@ -1,11 +1,23 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { Archivo_Narrow, Hanken_Grotesk, Instrument_Sans, Space_Grotesk } from "next/font/google";
+import { cookies } from "next/headers";
+import { clampCols, COLS_COOKIE, DEFAULT_COLS } from "@/lib/gridDensity";
 import { isPlexConfigured, viewSyncTtlMs } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getSetting } from "@/lib/settings";
 import { Footer } from "./_components/Footer";
+import { GridDensityProvider } from "./_components/GridDensity";
 import { PlexFreshener } from "./_components/PlexFreshener";
 import { SiteHeader } from "./_components/SiteHeader";
+
+// Four-family type system from the design reference: Instrument Sans (body), Space Grotesk (titles/headings),
+// Archivo Narrow (episode/director sub-lines), Hanken Grotesk (tabular meta/numbers). Exposed as CSS variables that
+// globals.css maps to the font-sans / font-display / font-narrow / font-num utilities.
+const instrument = Instrument_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-instrument" });
+const space = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-space" });
+const archivo = Archivo_Narrow({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-archivo" });
+const hanken = Hanken_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-hanken" });
 
 export const metadata: Metadata = {
   title: { default: "What's next", template: "%s · What's next" },
@@ -15,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0b",
+  themeColor: "#08080a",
   width: "device-width",
   initialScale: 1,
 };
@@ -23,21 +35,27 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Resolve identity once per request and hand permissions down (brief §5a): sessionUser = who's logged in,
   // displayedUser = whose data we render (v1: always the owner). isOwner drives every mutation affordance.
-  const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
+  const [sessionUser, displayedUser, cookieStore] = await Promise.all([getSessionUser(), getDisplayedUser(), cookies()]);
   const { isAdmin } = permissionsFor(sessionUser, displayedUser);
 
-  // Freshness dot beside Admin (owner + Plex configured only): how current the page's Plex-synced watch data is.
+  // Freshness pill beside the gear (owner + Plex configured only): how current the page's Plex-synced watch data is.
   // Red once the last sync is 3× the sync interval old — genuinely behind.
   const plexLastSync = isAdmin && isPlexConfigured() ? await getSetting("plex:lastSync") : null;
   const freshness = plexLastSync ? { lastSyncAt: plexLastSync.at, staleThresholdMs: 3 * viewSyncTtlMs() } : null;
 
+  // Seed the poster-grid column count from the persisted cookie so the server renders the chosen density (no flash).
+  const colsCookie = cookieStore.get(COLS_COOKIE)?.value;
+  const initialCols = colsCookie ? clampCols(Number(colsCookie)) : DEFAULT_COLS;
+
   return (
-    <html lang="en">
-      <body className="flex min-h-dvh flex-col">
-        <SiteHeader isOwner={isAdmin} freshness={freshness} />
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
-        <Footer isOwner={isAdmin} />
-        {isAdmin && isPlexConfigured() && <PlexFreshener />}
+    <html lang="en" className={`${instrument.variable} ${space.variable} ${archivo.variable} ${hanken.variable}`}>
+      <body>
+        <GridDensityProvider initialCols={initialCols}>
+          <SiteHeader isOwner={isAdmin} freshness={freshness} />
+          <main className="mx-auto w-full max-w-[1180px] flex-1 px-7 pt-[34px] pb-[120px]">{children}</main>
+          <Footer isOwner={isAdmin} />
+          {isAdmin && isPlexConfigured() && <PlexFreshener />}
+        </GridDensityProvider>
       </body>
     </html>
   );

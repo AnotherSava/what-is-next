@@ -1,10 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
-import { backupNow, setManualWatched, setMovieRatings } from "../actions";
-import { ACTION_BUTTON_CLASS } from "./buttonStyle";
+import { backupNow, setManualWatched } from "../actions";
+import { JOB_BUTTON_CLASS, JOB_BUTTON_STYLE } from "./buttonStyle";
+
+// The status dot that sits inside each job's "run now" button (green = up to date, amber = needs attention).
+function Dot({ color }: { color: string }) {
+  return <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: color }} aria-hidden />;
+}
 
 // Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
 // determinate bar; backup stays a plain server action. `lastRun` is the server-rendered summary shown when idle.
@@ -14,7 +19,7 @@ type RefreshMessage =
   | { type: "done"; result: RefreshResult }
   | { type: "error"; message: string };
 
-export function RefreshNowButton({ lastRun }: { lastRun: ReactNode }) {
+export function RefreshNowButton({ dotColor }: { dotColor: string }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<RefreshProgress | null>(null);
@@ -59,14 +64,11 @@ export function RefreshNowButton({ lastRun }: { lastRun: ReactNode }) {
 
   return (
     <div className="space-y-2.5">
-      <button type="button" disabled={running} onClick={run} className={ACTION_BUTTON_CLASS}>
+      <button type="button" disabled={running} onClick={run} className={JOB_BUTTON_CLASS} style={JOB_BUTTON_STYLE}>
+        <Dot color={dotColor} />
         {running ? "Refreshing…" : "Refresh now"}
       </button>
-      {running ? (
-        <ProgressBar progress={progress} />
-      ) : (
-        <div className="space-y-0.5 text-sm text-[var(--color-muted)]">{lastRun}</div>
-      )}
+      {running && <ProgressBar progress={progress} />}
       {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
     </div>
   );
@@ -116,65 +118,39 @@ function activePhase(p: RefreshProgress): string {
   return `Shows ${p.tvTotal}/${p.tvTotal}`;
 }
 
-// Owner toggle for the manual "mark watched" controls. Local state gives instant feedback; the server action
-// persists the flag and revalidates the surfaces that render those controls.
+// Owner toggle for the manual "mark watched" controls, styled as the design reference's pill switch. Local state
+// gives instant feedback; the server action persists the flag and revalidates the surfaces that render the controls.
 export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
   const [checked, setChecked] = useState(enabled);
   const [pending, start] = useTransition();
   return (
-    <label className="flex cursor-pointer items-center gap-3 text-sm">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={pending}
-        onChange={(e) => {
-          const next = e.target.checked;
-          setChecked(next);
-          start(() => setManualWatched(next));
-        }}
-        className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
-      />
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={pending}
+      onClick={() => {
+        const next = !checked;
+        setChecked(next);
+        start(() => setManualWatched(next));
+      }}
+      className="flex cursor-pointer items-center gap-[11px] text-sm disabled:opacity-50"
+    >
+      <span
+        className="relative h-5 w-[34px] shrink-0 rounded-full transition-colors"
+        style={{ background: checked ? "var(--color-accent-strong)" : "var(--color-border)" }}
+      >
+        <span
+          className="absolute top-[2px] h-4 w-4 rounded-full bg-white transition-[left]"
+          style={{ left: checked ? "16px" : "2px" }}
+        />
+      </span>
       <span>Enable manual watched toggle</span>
-    </label>
+    </button>
   );
 }
 
-// Owner toggles for which rating sources appear on movie cards. Both checkboxes share one setting object, so each
-// change persists the full { tmdb, imdb } pair; local state gives instant feedback and the action revalidates /movies.
-export function MovieRatingsToggles({ tmdb, imdb }: { tmdb: boolean; imdb: boolean }) {
-  const [state, setState] = useState({ tmdb, imdb });
-  const [pending, start] = useTransition();
-  function update(next: { tmdb: boolean; imdb: boolean }) {
-    setState(next);
-    start(() => setMovieRatings(next));
-  }
-  return (
-    <div className="flex flex-wrap gap-x-6 gap-y-2">
-      <label className="flex cursor-pointer items-center gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={state.tmdb}
-          disabled={pending}
-          onChange={(e) => update({ ...state, tmdb: e.target.checked })}
-          className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
-        />
-        <span>Show TMDB rating</span>
-      </label>
-      <label className="flex cursor-pointer items-center gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={state.imdb}
-          disabled={pending}
-          onChange={(e) => update({ ...state, imdb: e.target.checked })}
-          className="h-4 w-4 accent-[var(--color-accent-strong)] disabled:opacity-50"
-        />
-        <span>Show IMDb rating</span>
-      </label>
-    </div>
-  );
-}
-
-export function BackupNowButton() {
+export function BackupNowButton({ dotColor }: { dotColor: string }) {
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   return (
@@ -187,8 +163,10 @@ export function BackupNowButton() {
           setDone(true);
         })
       }
-      className={ACTION_BUTTON_CLASS}
+      className={JOB_BUTTON_CLASS}
+      style={JOB_BUTTON_STYLE}
     >
+      <Dot color={dotColor} />
       {pending ? "Backing up…" : done ? "Done ✓ — run again" : "Back up now"}
     </button>
   );

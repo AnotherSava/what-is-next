@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { PageTitle } from "@/app/_components/cardUi";
 
 export const metadata: Metadata = { title: "Credits" };
 
@@ -8,14 +9,16 @@ export const metadata: Metadata = { title: "Credits" };
 // require a credit + direct link wherever TVDB metadata appears; the footer covers every page).
 export default function CreditsPage() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Credits</h1>
+    <div className="max-w-[640px]">
+      <div className="mb-5">
+        <PageTitle>Credits</PageTitle>
+      </div>
 
-      <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer" className="inline-block">
-          <Image src="/tmdb.svg" alt="The Movie Database (TMDB)" width={423} height={35} className="h-4 w-auto" />
+      <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+        <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer" className="inline-flex">
+          <Image src="/tmdb.svg" alt="The Movie Database (TMDB)" width={423} height={35} className="block h-[18px] w-auto" />
         </a>
-        <p className="text-sm leading-relaxed text-[var(--color-muted)]">
+        <p className="mt-3 text-[13px] leading-relaxed text-[var(--color-muted)]">
           This product uses the TMDB API but is not endorsed or certified by TMDB.
         </p>
       </div>

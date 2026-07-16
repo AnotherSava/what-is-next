@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { FreshnessDot } from "./FreshnessDot";
+import { BrandLink } from "./BrandLink";
+import { GridDensitySlider } from "./GridDensity";
+import { NavLinks } from "./NavLinks";
+import { SyncPill } from "./FreshnessDot";
 
-// Top navigation, shared by viewer and owner renders. Content destinations sit on the left; the owner's Admin
-// console + Sign in sit on the right (Sign out lives in the footer). Owner-only destinations (Search adds
-// catalog rows; Admin runs refresh/backups/Plex sync) appear only when isOwner — but that's UX; the routes
-// themselves are guarded server-side (proxy.ts for /admin, requireOwner() in each action).
-//
-// freshness (owner + Plex configured only) drives the little dot beside Admin: how current the Plex-synced watch
-// data on the page is. Null when there's nothing to report (no Plex, or never synced).
+// Top navigation (design reference). Left: the brand mark (home) + a divider + the content destinations. Right: the
+// poster-grid density slider, the Plex "Synced" pill, and a gear that opens Settings (Admin). Matches the reference
+// chrome exactly — Lists and Search are reachable by URL but no longer sit in the nav. Owner-only destinations
+// (Download) and the gear/Synced controls appear only for the owner; the routes are still guarded server-side.
 export function SiteHeader({
   isOwner,
   freshness,
@@ -16,47 +16,55 @@ export function SiteHeader({
   freshness: { lastSyncAt: string; staleThresholdMs: number } | null;
 }) {
   const links: { href: string; label: string }[] = [
-    { href: "/", label: "Watch next" },
-    // Owner-only: Download surfaces what to acquire for your own Plex library — an owner utility, not viewer content.
-    ...(isOwner ? [{ href: "/download", label: "Download" }] : []),
     { href: "/shows", label: "Shows" },
     { href: "/movies", label: "Movies" },
-    { href: "/recent", label: "Recently watched" },
-    { href: "/lists", label: "Lists" },
-    ...(isOwner ? [{ href: "/search", label: "Search" }] : []),
+    { href: "/recent", label: "Recent" },
+    // Download surfaces what to acquire for your own Plex library — an owner utility, not viewer content.
+    ...(isOwner ? [{ href: "/download", label: "Download" }] : []),
   ];
-  const itemClass =
-    "rounded-md px-2.5 py-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]";
   return (
-    <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-bg)]/85 backdrop-blur">
-      <nav className="mx-auto flex max-w-4xl items-center gap-1 px-4 py-3 text-sm">
-        <Link href="/" className="mr-2 font-semibold tracking-tight">
-          What&rsquo;s next
-        </Link>
-        <div className="flex flex-1 items-center gap-1 overflow-x-auto">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href} className={itemClass}>
-              {l.label}
-            </Link>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5">
+    <header
+      className="sticky top-0 z-40 border-b border-[var(--color-border)]"
+      style={{ background: "rgba(9,9,11,0.82)", backdropFilter: "blur(12px)" }}
+    >
+      <div className="mx-auto flex w-full max-w-[1180px] items-center gap-2 px-7 py-[11px]">
+        <BrandLink />
+        <span className="mx-1.5 h-[18px] w-px bg-[var(--color-surface-2)]" />
+        <NavLinks items={links} />
+        <span className="ml-auto flex items-center gap-4">
+          <GridDensitySlider />
+          <span className="h-[18px] w-px bg-[var(--color-surface-2)]" />
+          {isOwner && freshness && (
+            <SyncPill lastSyncAt={freshness.lastSyncAt} staleThresholdMs={freshness.staleThresholdMs} />
+          )}
           {isOwner ? (
-            <>
-              {freshness && (
-                <FreshnessDot lastSyncAt={freshness.lastSyncAt} staleThresholdMs={freshness.staleThresholdMs} />
-              )}
-              <Link href="/admin" className={itemClass}>
-                Admin
-              </Link>
-            </>
+            <Link href="/admin" aria-label="Settings" title="Settings" className="flex items-center">
+              <svg
+                className="wn-gear"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-faint)"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </Link>
           ) : (
-            <Link href="/login" className={itemClass}>
+            <Link
+              href="/login"
+              className="wn-nav flex h-[22px] items-center rounded-lg px-2.5 text-[13px] font-medium text-[var(--color-muted)]"
+            >
               Sign in
             </Link>
           )}
-        </div>
-      </nav>
+        </span>
+      </div>
     </header>
   );
 }

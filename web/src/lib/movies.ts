@@ -14,7 +14,9 @@ export interface MovieSummary {
   tmdbId: number | null;
   tmdbRating: number | null; // TMDB community score (0–10)
   imdbRating: number | null; // IMDb community score (0–10), fetched from OMDb; null when unresolved
+  imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page; null when unresolved
   director: string | null; // director(s), comma-joined; null when unresolved
+  runtime: number | null; // minutes; null when unresolved
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null;
@@ -65,7 +67,9 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       tmdbId: st.mediaItem.tmdbId,
       tmdbRating: st.mediaItem.tmdbRating,
       imdbRating: st.mediaItem.imdbRating,
+      imdbId: st.mediaItem.imdbId,
       director: st.mediaItem.director,
+      runtime: st.mediaItem.runtime,
       isFavorite: st.isFavorite,
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,

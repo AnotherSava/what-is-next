@@ -81,9 +81,6 @@ const plexUnaccountedSchema = z.object({
 // comes from the Plex sync, and the owner opts in to manual toggles from the admin page.
 const manualWatchedSchema = z.object({ enabled: z.boolean() });
 
-// User-facing app setting: which rating sources appear on movie cards. Both on by default; the owner can hide
-// either from the admin page (e.g. show only IMDb).
-const movieRatingsSchema = z.object({ tmdb: z.boolean(), imdb: z.boolean() });
 
 // Owner-configured download-source links for the Download view (torrent/tracker searches). Each source's URL —
 // domain, path, params — lives here, in runtime config, not the repo, so no download-source details are ever
@@ -127,7 +124,6 @@ const SETTING_SCHEMAS = {
   "plex:presenceCursor": plexPresenceCursorSchema,
   "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
-  "settings:movieRatings": movieRatingsSchema,
   "settings:downloadSources": downloadSourcesSchema,
 } as const;
 
@@ -148,11 +144,6 @@ export async function setSetting<K extends SettingKey>(key: K, value: SettingVal
 // Whether the manual "mark watched" controls are shown in the UI. Off unless the owner has enabled it.
 export async function isManualWatchedEnabled(): Promise<boolean> {
   return (await getSetting("settings:manualWatched"))?.enabled ?? false;
-}
-
-// Which rating sources are shown on movie cards. Both default to true (show TMDB + IMDb) until the owner changes it.
-export async function getMovieRatingsVisibility(): Promise<{ tmdb: boolean; imdb: boolean }> {
-  return (await getSetting("settings:movieRatings")) ?? { tmdb: true, imdb: true };
 }
 
 // The Plex server's machineIdentifier, or null until a sync has recorded it — needed to build watch deep links.
