@@ -16,5 +16,6 @@ export {
 export { getPlexEpisodePresence, getPlexPresenceKeys, getShowPlexPresence } from "./presence";
 export { plexWatchUrl, plexWebUrl } from "./link";
 export { plexDeps, syncPlexPresence, syncPlexPresenceIfStale, viewSyncTtlMs } from "./run";
+export { plexSyncSummary } from "./summary";
 export { parseGuids } from "./schemas";
 export { clearEpisodeSuppressions, clearMovieSuppression, suppressWatch } from "./suppression";

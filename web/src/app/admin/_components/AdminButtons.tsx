@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
 import { backupNow, setManualWatched } from "../actions";
 import { JOB_BUTTON_CLASS, JOB_BUTTON_STYLE } from "./buttonStyle";
+import { FreshnessBadge } from "./FreshnessBadge";
 
 // The status dot that sits inside each job's "run now" button (green = up to date, amber = needs attention).
 function Dot({ color }: { color: string }) {
@@ -19,7 +20,19 @@ type RefreshMessage =
   | { type: "done"; result: RefreshResult }
   | { type: "error"; message: string };
 
-export function RefreshNowButton({ dotColor }: { dotColor: string }) {
+export function RefreshNowButton({
+  dotColor,
+  freshness,
+  freshnessColor,
+  freshnessTitle,
+  result,
+}: {
+  dotColor: string;
+  freshness: string;
+  freshnessColor: string;
+  freshnessTitle?: string;
+  result: ReactNode; // the server-rendered last-run result; hidden while a fresh run is in progress
+}) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<RefreshProgress | null>(null);
@@ -48,12 +61,13 @@ export function RefreshNowButton({ dotColor }: { dotColor: string }) {
           buffer = buffer.slice(nl + 1);
           if (!line) continue;
           const msg = JSON.parse(line) as RefreshMessage;
+          // The final {type:"done"} result is ignored here — the card re-reads it from the DB on router.refresh().
           if (msg.type === "progress") setProgress(msg);
           else if (msg.type === "error") streamError = msg.message;
         }
       }
       if (streamError) setError(streamError);
-      else router.refresh(); // pull the updated "Last run" summary — one refresh, not a four-route revalidation
+      else router.refresh(); // pull the updated last-run result the card renders — one refresh, not a four-route revalidation
     } catch (e) {
       setError(e instanceof Error ? e.message : "Refresh failed.");
     } finally {
@@ -63,13 +77,24 @@ export function RefreshNowButton({ dotColor }: { dotColor: string }) {
   }
 
   return (
-    <div className="space-y-2.5">
-      <button type="button" disabled={running} onClick={run} className={JOB_BUTTON_CLASS} style={JOB_BUTTON_STYLE}>
-        <Dot color={dotColor} />
-        {running ? "Refreshing…" : "Refresh now"}
-      </button>
-      {running && <ProgressBar progress={progress} />}
-      {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <div className="w-full space-y-[15px]">
+      {/* Button and status share one line so the status stays put; the progress bar / result drops below, where its
+          long episode titles can't shove the status around. */}
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" disabled={running} onClick={run} className={JOB_BUTTON_CLASS} style={JOB_BUTTON_STYLE}>
+          <Dot color={dotColor} />
+          {running ? "Refreshing…" : "Refresh now"}
+        </button>
+        <FreshnessBadge text={freshness} color={freshnessColor} title={freshnessTitle} />
+      </div>
+      {/* While running, the live progress bar replaces the previous run's result; on failure the error replaces it. */}
+      {running ? (
+        <ProgressBar progress={progress} />
+      ) : error ? (
+        <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
+      ) : (
+        result
+      )}
     </div>
   );
 }
@@ -150,24 +175,38 @@ export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
   );
 }
 
-export function BackupNowButton({ dotColor }: { dotColor: string }) {
+export function BackupNowButton({
+  dotColor,
+  freshness,
+  freshnessColor,
+  freshnessTitle,
+  result,
+}: {
+  dotColor: string;
+  freshness: string;
+  freshnessColor: string;
+  freshnessTitle?: string;
+  result: ReactNode; // the server-rendered last-backup result; hidden while a fresh backup is in progress
+}) {
   const [pending, start] = useTransition();
-  const [done, setDone] = useState(false);
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        start(async () => {
-          await backupNow();
-          setDone(true);
-        })
-      }
-      className={JOB_BUTTON_CLASS}
-      style={JOB_BUTTON_STYLE}
-    >
-      <Dot color={dotColor} />
-      {pending ? "Backing up…" : done ? "Done ✓ — run again" : "Back up now"}
-    </button>
+    <div className="w-full space-y-[15px]">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          disabled={pending}
+          // The label stays stable rather than flipping to a "done" state — the result below carries the outcome.
+          onClick={() => start(async () => void (await backupNow()))}
+          className={JOB_BUTTON_CLASS}
+          style={JOB_BUTTON_STYLE}
+        >
+          <Dot color={dotColor} />
+          {pending ? "Backing up…" : "Back up now"}
+        </button>
+        <FreshnessBadge text={freshness} color={freshnessColor} title={freshnessTitle} />
+      </div>
+      {/* Hide the previous backup's result while a fresh one runs, but keep its space so the card doesn't resize. */}
+      <div style={pending ? { visibility: "hidden" } : undefined}>{result}</div>
+    </div>
   );
 }

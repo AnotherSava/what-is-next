@@ -15,13 +15,25 @@ import { getTvdb, hydrateMovieByTvdbId, hydrateShowByTvdbId, isTvdbConfigured } 
 // Logs a one-line summary into Setting `refresh:lastRun` for the admin page. The manual "Refresh now" buttons
 // call the same code path.
 
+// A single item that failed to refresh — surfaced on the admin page so "N errors" is inspectable, not opaque.
+export interface RefreshError {
+  title: string;
+  mediaType: "tv" | "movie";
+  reason: string;
+}
+
 export interface RefreshResult {
   tvRefreshed: number;
   moviesRefreshed: number;
   tvdbResolved: number; // catalog rows hydrated from the TVDB fallback (titles TMDB can't resolve)
   errors: number;
+  errorItems: RefreshError[]; // details for a bounded sample of the failures (errors is the authoritative total)
   durationMs: number;
 }
+
+// Cap on stored error details — the count is always exact, but we keep at most this many rows so a pathological
+// all-fail run can't bloat the Setting. In practice failures are a handful.
+const MAX_ERROR_ITEMS = 100;
 
 // Live progress for the manual "Refresh now" stream (admin UI). Counts are items *processed* (success or error)
 // so the bar advances even when an item fails. The nightly cron passes no callback and never builds these.
@@ -88,6 +100,17 @@ export async function refreshAll(
   let moviesRefreshed = 0;
   let tvdbResolved = 0;
   let errors = 0;
+  const errorItems: RefreshError[] = [];
+  // One place to record a failure: bump the exact count, and keep the detail up to the cap.
+  const noteError = (title: string, mediaType: "tv" | "movie", reason: string) => {
+    errors++;
+    if (errorItems.length < MAX_ERROR_ITEMS) errorItems.push({ title, mediaType, reason });
+  };
+  const reasonOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  let failure: unknown = null; // set by the hydrate onError hook, so a null return carries its real reason
+  const capture = (e: unknown) => {
+    failure = e;
+  };
   let tvProcessed = 0;
   let movieProcessed = 0;
   let tvdbProcessed = 0;
@@ -111,11 +134,12 @@ export async function refreshAll(
   for (const it of tvWork) {
     current = it.title;
     emit();
+    failure = null;
     try {
-      if (await hydrateShowByTmdbId(prisma, tmdb, it.tmdbId!)) tvRefreshed++;
-      else errors++;
-    } catch {
-      errors++;
+      if (await hydrateShowByTmdbId(prisma, tmdb, it.tmdbId!, capture)) tvRefreshed++;
+      else noteError(it.title, "tv", failure ? reasonOf(failure) : "TMDB returned no data for this show");
+    } catch (e) {
+      noteError(it.title, "tv", reasonOf(e));
     }
     tvProcessed++;
   }
@@ -123,11 +147,12 @@ export async function refreshAll(
   for (const it of movieWork) {
     current = it.title;
     emit();
+    failure = null;
     try {
-      if (await hydrateMovieByTmdbId(prisma, tmdb, it.tmdbId!)) moviesRefreshed++;
-      else errors++;
-    } catch {
-      errors++;
+      if (await hydrateMovieByTmdbId(prisma, tmdb, it.tmdbId!, capture)) moviesRefreshed++;
+      else noteError(it.title, "movie", failure ? reasonOf(failure) : "TMDB returned no data for this movie");
+    } catch (e) {
+      noteError(it.title, "movie", reasonOf(e));
     }
     movieProcessed++;
   }
@@ -137,15 +162,16 @@ export async function refreshAll(
     for (const it of tvdbWork) {
       current = it.title;
       emit();
+      const mediaType: "tv" | "movie" = it.mediaType === "tv" ? "tv" : "movie";
       try {
         const id =
-          it.mediaType === "tv"
+          mediaType === "tv"
             ? await hydrateShowByTvdbId(prisma, tvdb, it.tvdbId!)
             : await hydrateMovieByTvdbId(prisma, tvdb, it.tvdbId!);
         if (id) tvdbResolved++;
-        else errors++;
-      } catch {
-        errors++;
+        else noteError(it.title, mediaType, "TVDB returned no data for this title");
+      } catch (e) {
+        noteError(it.title, mediaType, reasonOf(e));
       }
       tvdbProcessed++;
     }
@@ -154,7 +180,14 @@ export async function refreshAll(
   current = null;
   emit(); // final frame: everything processed, nothing in flight (100%)
 
-  const result: RefreshResult = { tvRefreshed, moviesRefreshed, tvdbResolved, errors, durationMs: Date.now() - nowMs };
+  const result: RefreshResult = {
+    tvRefreshed,
+    moviesRefreshed,
+    tvdbResolved,
+    errors,
+    errorItems,
+    durationMs: Date.now() - nowMs,
+  };
   await setSetting("refresh:lastRun", { at: new Date(nowMs).toISOString(), trigger, ...result });
   return result;
 }

@@ -27,6 +27,16 @@ function backupDir(): string {
   return process.env.BACKUP_DIR ?? join(dirname(dbFilePath()), "backups");
 }
 
+// Resolve a backup filename (basename only) to a full path for the owner-only download route, or null if it
+// doesn't belong here. Guards against path traversal: the name must be a bare snapshot filename living directly in
+// the backup dir — no separators, our prefix, our extension — and the file must exist.
+export function resolveBackupFile(name: string): string | null {
+  if (name.includes("/") || name.includes("\\") || !name.startsWith(BACKUP_PREFIX) || !name.endsWith(".db"))
+    return null;
+  const full = join(backupDir(), name);
+  return existsSync(full) ? full : null;
+}
+
 export async function runBackup(nowMs: number = Date.now()): Promise<BackupResult> {
   const at = new Date(nowMs).toISOString();
   const src = dbFilePath();
@@ -35,7 +45,10 @@ export async function runBackup(nowMs: number = Date.now()): Promise<BackupResul
     if (!src) throw new Error("DATABASE_URL is not set");
     if (!existsSync(src)) throw new Error(`Database file not found: ${src}`);
     mkdirSync(dir, { recursive: true });
-    const dest = join(dir, `${BACKUP_PREFIX}${at.replace(/[:.]/g, "-")}.db`);
+    // Filename timestamp: drop the milliseconds/zone (slice to seconds), split date from time with "_", and make
+    // the time colon-free ("2026-07-16_11-07-48") so the name is filesystem-safe and readable.
+    const stamp = at.slice(0, 19).replace("T", "_").replace(/:/g, "-");
+    const dest = join(dir, `${BACKUP_PREFIX}${stamp}.db`);
 
     const db = new Database(src, { readonly: true });
     try {

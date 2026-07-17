@@ -153,11 +153,13 @@ export async function hydrateShowByTmdbId(
   prisma: PrismaClient,
   tmdb: TmdbClient,
   tmdbId: number,
+  onError?: (e: unknown) => void, // optional: observe the swallowed fetch error (the refresh job reports it)
 ): Promise<string | null> {
   let detail: TmdbTvDetail;
   try {
     detail = await tmdb.getTvDetail(tmdbId);
-  } catch {
+  } catch (e) {
+    onError?.(e);
     return null;
   }
   const existing = await prisma.mediaItem.findUnique({
@@ -191,11 +193,13 @@ export async function hydrateMovieByTmdbId(
   prisma: PrismaClient,
   tmdb: TmdbClient,
   tmdbId: number,
+  onError?: (e: unknown) => void, // optional: observe the swallowed fetch error (the refresh job reports it)
 ): Promise<string | null> {
   let detail: TmdbMovieDetail;
   try {
     detail = await tmdb.getMovieDetail(tmdbId);
-  } catch {
+  } catch (e) {
+    onError?.(e);
     return null;
   }
   const existing = await prisma.mediaItem.findUnique({

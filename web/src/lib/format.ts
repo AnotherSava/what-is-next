@@ -1,9 +1,15 @@
 // Small presentation helpers shared across pages.
 
+// Just the correctly-pluralized noun for a count, without the number — for layouts that style the number and the
+// word separately. Pass an explicit plural for irregular nouns (e.g. pluralWord(n, "watch", "watches")).
+export function pluralWord(n: number, singular: string, pluralForm: string = `${singular}s`): string {
+  return n === 1 ? singular : pluralForm;
+}
+
 // Render a count with its noun, pluralized. Pass an explicit plural form for irregular nouns (e.g.
 // plural(n, "watch", "watches")); regular nouns default to singular + "s".
 export function plural(n: number, singular: string, pluralForm: string = `${singular}s`): string {
-  return `${n} ${n === 1 ? singular : pluralForm}`;
+  return `${n} ${pluralWord(n, singular, pluralForm)}`;
 }
 
 // A job duration in whole-tenths of a second: "3.2s". For the sub-minute elapsed times the nightly jobs report.

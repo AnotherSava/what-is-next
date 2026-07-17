@@ -2,14 +2,19 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { PageTitle } from "@/app/_components/cardUi";
 import { getPrisma } from "@/lib/db";
-import { plural, seconds } from "@/lib/format";
+import { plural } from "@/lib/format";
 import { isPlexConfigured } from "@/lib/plex";
 import { getSessionUser } from "@/lib/session";
+import { plexSyncSummary } from "@/lib/plex";
+import type { RefreshError } from "@/lib/refresh";
+import { refreshSummary } from "@/lib/refreshSummary";
 import { getDownloadSources, getSetting, isManualWatchedEnabled } from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
 import { addSelectedPlexItems } from "./actions";
 import { BackupNowButton, ManualWatchedToggle, RefreshNowButton } from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
+import { FreshnessBadge } from "./_components/FreshnessBadge";
+import { RunResult, StatRows } from "./_components/RunResult";
 import { DownloadSourcesEditor } from "./_components/DownloadSources";
 import { SyncPlexButton } from "./_components/SyncButton";
 
@@ -30,7 +35,6 @@ const STATE_COLOR: Record<JobState, string> = {
 
 const CARD_CLASS = "rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]";
 const DESC_CLASS = "text-[13px] leading-[1.5] text-[var(--color-muted)]";
-const DETAIL_CLASS = "font-num text-[12px] tabular-nums text-[var(--color-faint)]";
 
 function absolute(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
@@ -43,6 +47,72 @@ function ago(iso: string, nowMs: number): string {
   const h = Math.round(min / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.round(h / 24)}d ago`;
+}
+
+// Split a backup file path into its folder and filename for the two-line location readout. Handles both Windows
+// (dev) and POSIX (prod) separators.
+function splitPath(p: string): { folder: string; file: string } {
+  const m = p.match(/^(.*)[\\/]([^\\/]+)$/);
+  return m ? { folder: m[1], file: m[2] } : { folder: "", file: p };
+}
+
+// The backup snapshot's folder + downloadable filename, used as the Backup card's result body. Two label/value rows
+// (muted label column, mono value) matching the design. The folder row is static (with the design's zebra stripe);
+// the whole file value is a download link that, like the reference's `.wn-icobtn`, highlights on hover (surface fill
+// + brighter text) and downloads the snapshot on click.
+function backupFileLines(filePath: string | null, prunedCount: number): React.ReactNode {
+  const { folder, file } = splitPath(filePath ?? "");
+  const downloadHref = `/api/admin/backup/download?file=${encodeURIComponent(file)}`;
+  return (
+    <div className="flex flex-col">
+      <div
+        className="-mx-2 flex min-w-0 items-center gap-[9px] rounded-md px-2 py-1"
+        style={{ background: "rgba(255,255,255,0.015)" }}
+      >
+        <span className="w-[38px] shrink-0 font-num text-[12.5px] text-[var(--color-muted)]">folder</span>
+        <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#c4c4cc]" title={folder}>
+          {folder}
+        </code>
+      </div>
+      <div className="-mx-2 flex min-w-0 items-center gap-[9px] rounded-md px-2 py-1">
+        <span className="w-[38px] shrink-0 font-num text-[12.5px] text-[var(--color-muted)]">file</span>
+        <a
+          href={downloadHref}
+          download={file}
+          title="Download backup"
+          className="wn-dl min-w-0 flex-1 truncate font-mono text-[11px] text-[#c4c4cc]"
+        >
+          {file}
+        </a>
+        <a
+          href={downloadHref}
+          download={file}
+          title="Download backup"
+          aria-label="Download backup"
+          className="wn-icobtn -ml-[3px] flex shrink-0 items-center rounded-md p-1"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M12 15V3" />
+          </svg>
+        </a>
+      </div>
+      {prunedCount > 0 && (
+        <div className="mt-1 px-2 text-[11px] text-[var(--color-faint)]">pruned {prunedCount} old</div>
+      )}
+    </div>
+  );
 }
 
 // Owner console (brief §8.7) — the Settings view. proxy.ts already requires a session to reach /admin; this
@@ -78,18 +148,25 @@ export default async function AdminPage() {
     : refresh.errors > 0 || stale(refresh.at) || tvdbStubs > 0
       ? "warn"
       : "ok";
+  // Status word only — the "when" moved into the result line below the button (see refreshDetail).
   const refreshFresh = !refresh
     ? "never run"
     : refresh.errors > 0
-      ? `${plural(refresh.errors, "error")} · ${ago(refresh.at, nowMs)}`
+      ? plural(refresh.errors, "error")
       : stale(refresh.at)
-        ? `stale · ${ago(refresh.at, nowMs)}`
+        ? "stale"
         : tvdbStubs > 0
           ? `${plural(tvdbStubs, "title")} unresolved`
-          : `up to date · ${ago(refresh.at, nowMs)}`;
-  const refreshDetail = refresh
-    ? `${plural(refresh.tvRefreshed, "show")} · ${plural(refresh.moviesRefreshed, "movie")} · ${refresh.tvdbResolved ?? 0} via TVDB · ${seconds(refresh.durationMs)}`
-    : "The nightly job runs automatically; this button triggers it now.";
+          : "up to date";
+  // The last run's result — always shown, with its relative time in the heading ("Refreshed 1m ago") and the
+  // duration to the right; stats (bright numbers, muted labels) below.
+  const refreshRes = refresh ? refreshSummary(refresh) : null;
+  const refreshDetail =
+    refresh && refreshRes ? (
+      <RunResult verb="Refreshed" when={ago(refresh.at, nowMs)} duration={refreshRes.duration}>
+        <StatRows stats={refreshRes.stats} />
+      </RunResult>
+    ) : null;
   // TVDB-fallback fix line — shown inside the Refresh card only while TMDB-unresolvable titles remain as stubs.
   const tvdbNote =
     tvdbStubs > 0
@@ -115,22 +192,27 @@ export default async function AdminPage() {
     : !plexSync
       ? "never synced"
       : stale(plexSync.at)
-        ? `stale · ${ago(plexSync.at, nowMs)}`
-        : `up to date · ${ago(plexSync.at, nowMs)}`;
-  const plexStats = plexSync
-    ? `${plural(plexSync.matchedShows, "show")} · ${plural(plexSync.matchedMovies, "movie")} · ${plural(plexSync.presenceSeasons, "season")} marked · ${plural(plexSync.importedWatches, "watch", "watches")} imported · ${plexSync.unaccounted} unmatched · ${seconds(plexSync.durationMs)}`
-    : null;
+        ? "stale"
+        : "up to date";
+  // The last sync's result — always shown, with its relative time in the heading and the duration to the right.
+  const plexRes = plexSync ? plexSyncSummary(plexSync) : null;
+  const plexStats =
+    plexSync && plexRes ? (
+      <RunResult verb="Synced" when={ago(plexSync.at, nowMs)} duration={plexRes.duration}>
+        <StatRows stats={plexRes.stats} />
+      </RunResult>
+    ) : null;
 
   // ── Backup ───────────────────────────────────────────────────────────────
   const backupState: JobState = !backup ? "warn" : !backup.ok || stale(backup.at) ? "warn" : "ok";
-  const backupFresh = !backup
-    ? "never run"
-    : !backup.ok
-      ? `failed · ${ago(backup.at, nowMs)}`
-      : stale(backup.at)
-        ? `stale · ${ago(backup.at, nowMs)}`
-        : `up to date · ${ago(backup.at, nowMs)}`;
-  const backupStats = !backup ? null : !backup.ok ? (backup.error ?? "Backup failed.") : `${backup.file} · pruned ${backup.prunedCount} old`;
+  const backupFresh = !backup ? "never run" : !backup.ok ? "failed" : stale(backup.at) ? "stale" : "up to date";
+  const backupStats: React.ReactNode = !backup ? null : !backup.ok ? (
+    <p className="text-[12px] text-red-400">{backup.error ?? "Backup failed."}</p>
+  ) : (
+    <RunResult verb="Backed up" when={ago(backup.at, nowMs)}>
+      {backupFileLines(backup.file, backup.prunedCount)}
+    </RunResult>
+  );
 
   return (
     <div className="space-y-[14px]">
@@ -142,29 +224,51 @@ export default async function AdminPage() {
       {/* One card per scheduled job — the run-now button (with a status dot) up top, stats at the bottom. */}
       <div className="grid grid-cols-1 gap-[14px] md:grid-cols-3">
         <JobCard
-          button={<RefreshNowButton dotColor={STATE_COLOR[refreshState]} />}
+          button={
+            <RefreshNowButton
+              dotColor={STATE_COLOR[refreshState]}
+              freshness={refreshFresh}
+              freshnessColor={STATE_COLOR[refreshState]}
+              freshnessTitle={refresh ? absolute(refresh.at) : undefined}
+              result={
+                <>
+                  {refreshDetail}
+                  {tvdbNote && <p className="mt-2 text-[13px] text-[var(--color-behind)]">{tvdbNote}</p>}
+                  {refresh && refresh.errors > 0 && refresh.errorItems.length > 0 && (
+                    <RefreshErrors errors={refresh.errors} items={refresh.errorItems} />
+                  )}
+                </>
+              }
+            />
+          }
+          statusInButton
           freshness={refreshFresh}
           color={STATE_COLOR[refreshState]}
           at={refresh?.at}
-          desc={
-            <>
-              Re-pulls show &amp; movie metadata (episodes, air dates, status) from TMDB — and TVDB for titles it
-              can&rsquo;t resolve — so returning shows and upcoming movies stay current. Never touches your watch
-              history.
-            </>
-          }
-          detail={refreshDetail}
-          extra={tvdbNote && <p className="mt-2 text-[13px] text-[var(--color-behind)]">{tvdbNote}</p>}
+          hasResult={!!refresh}
+          desc={<em>Re-pulls show &amp; movie metadata (episodes, air dates, status) from TMDB/TVDB</em>}
         />
 
         <JobCard
-          button={plexOn ? <SyncPlexButton dotColor={STATE_COLOR[plexState]} /> : null}
+          button={
+            plexOn ? (
+              <SyncPlexButton
+                dotColor={STATE_COLOR[plexState]}
+                freshness={plexFresh}
+                freshnessColor={STATE_COLOR[plexState]}
+                freshnessTitle={plexSync ? absolute(plexSync.at) : undefined}
+                result={plexStats}
+              />
+            ) : null
+          }
+          statusInButton={plexOn}
           freshness={plexFresh}
           color={STATE_COLOR[plexState]}
           at={plexSync?.at}
+          hasResult={!!plexSync}
           desc={
             plexOn ? (
-              "Scan matches your Plex library to the catalog and marks what you have."
+              <em>Re-pulls your Plex catalog, including watched status and dates</em>
             ) : (
               <>
                 Set <span className="font-mono text-xs">PLEX_URL</span> +{" "}
@@ -172,16 +276,24 @@ export default async function AdminPage() {
               </>
             )
           }
-          detail={plexStats}
         />
 
         <JobCard
-          button={<BackupNowButton dotColor={STATE_COLOR[backupState]} />}
+          button={
+            <BackupNowButton
+              dotColor={STATE_COLOR[backupState]}
+              freshness={backupFresh}
+              freshnessColor={STATE_COLOR[backupState]}
+              freshnessTitle={backup ? absolute(backup.at) : undefined}
+              result={backupStats}
+            />
+          }
+          statusInButton
           freshness={backupFresh}
           color={STATE_COLOR[backupState]}
           at={backup?.at}
-          desc="Snapshots are kept 14 days on the data volume."
-          detail={backupStats}
+          hasResult={!!backup}
+          desc={<em>Saves a full snapshot of the database; older snapshots are pruned after 14 days</em>}
         />
       </div>
 
@@ -196,7 +308,13 @@ export default async function AdminPage() {
               {candidates.map((c) => (
                 <li key={c.plexRatingKey}>
                   <label className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[var(--color-surface-2)]">
-                    <input type="checkbox" name="ratingKey" value={c.plexRatingKey} defaultChecked className="accent-[#e5a00d]" />
+                    <input
+                      type="checkbox"
+                      name="ratingKey"
+                      value={c.plexRatingKey}
+                      defaultChecked
+                      className="accent-[#e5a00d]"
+                    />
                     <span className="flex-1 text-sm">
                       {c.title} {c.year && <span className="text-[var(--color-muted)]">({c.year})</span>}
                       <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
@@ -268,35 +386,112 @@ export default async function AdminPage() {
   );
 }
 
+// The inspectable breakdown behind the Refresh card's "N errors" badge. Distinct error messages surface right
+// away; the titles hit by each fold into an expansion box. Populated on the next run; older summaries (count
+// only) render nothing here.
+function RefreshErrors({ errors, items }: { errors: number; items: RefreshError[] }) {
+  // Group failures by reason, preserving first-seen order.
+  const groups = new Map<string, RefreshError[]>();
+  for (const it of items) {
+    const g = groups.get(it.reason);
+    if (g) g.push(it);
+    else groups.set(it.reason, [it]);
+  }
+  return (
+    <div className="mt-2.5 space-y-1.5 text-[12px]">
+      {[...groups.entries()].map(([reason, group]) => (
+        <details key={reason}>
+          <summary className="flex cursor-pointer select-none items-center gap-1 text-[var(--color-behind)] [&::-webkit-details-marker]:hidden">
+            <span className="flex shrink-0 text-[var(--color-faint)]" aria-hidden>
+              {/* Collapsed: chevron points right; expanded: chevron points down. Swapped by the [open] rule above. */}
+              <svg
+                className="wn-disc-collapsed"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <svg
+                className="wn-disc-expanded hidden"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+            <span className="truncate">
+              {reason} <span className="text-[var(--color-faint)]">· {group.length}</span>
+            </span>
+          </summary>
+          <ul className="mt-1 list-inside list-disc pl-1.5 leading-tight marker:text-[var(--color-faint)]">
+            {group.map((e, i) => (
+              <li key={i} className="truncate">
+                <span className="text-[var(--color-text)]">{e.title}</span>
+                <span className="ml-1.5 rounded bg-[var(--color-surface-2)] px-1 text-[10px] uppercase text-[var(--color-muted)]">
+                  {e.mediaType === "tv" ? "TV" : "Movie"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+      {errors > items.length && (
+        <p className="text-[var(--color-faint)]">
+          Showing {items.length} of {errors} failures.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function JobCard({
   button,
   freshness,
   color,
   at,
   desc,
-  detail,
-  extra,
+  hasResult,
+  statusInButton,
 }: {
   button: React.ReactNode;
   freshness: string;
   color: string;
   at?: string;
   desc: React.ReactNode;
-  detail?: string | null;
-  extra?: React.ReactNode;
+  // The last-run result now lives inside the button (so the button can hide it while a fresh run is in progress);
+  // this flag just tells the card whether to draw the divider above the description.
+  hasResult?: boolean;
+  // When the button owns the status badge (all configured jobs), it renders the badge on its own line so a
+  // progress bar / result below can't shove it around — otherwise the card renders the badge in the header itself.
+  statusInButton?: boolean;
 }) {
   return (
     <section className={`flex h-full flex-col ${CARD_CLASS} px-5 py-[18px]`}>
       <div className="mb-[14px] flex items-center justify-between gap-3">
         {button ?? <span />}
-        <span className={DETAIL_CLASS} style={{ color }} title={at ? absolute(at) : undefined}>
-          {freshness}
-        </span>
+        {!statusInButton && <FreshnessBadge text={freshness} color={color} title={at ? absolute(at) : undefined} />}
       </div>
-      <p className={DESC_CLASS}>{desc}</p>
-      <div className="min-h-[12px] flex-1" />
-      {detail && <span className={`truncate ${DETAIL_CLASS}`}>{detail}</span>}
-      {extra}
+      {/* The button (above) carries the last-run result; the explanatory blurb sinks to the bottom in pale italic
+          text, under a divider when there's a result to separate it from. */}
+      <div className="min-h-[18px] flex-1" />
+      <p
+        className={`text-pretty text-[12px] leading-[1.5] ${hasResult ? "border-t border-[#22222a] pt-3" : ""}`}
+        style={{ color: "#77777f" }}
+      >
+        {desc}
+      </p>
     </section>
   );
 }

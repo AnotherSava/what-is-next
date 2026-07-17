@@ -18,6 +18,11 @@ const refreshLastRunSchema = z.object({
   moviesRefreshed: z.number().int(),
   tvdbResolved: z.number().int().default(0), // default keeps pre-TVDB stored summaries parseable
   errors: z.number().int(),
+  // Per-failure details for the admin card. Default [] keeps pre-feature summaries (which only stored the count)
+  // parseable; those older runs simply show no breakdown.
+  errorItems: z
+    .array(z.object({ title: z.string(), mediaType: z.enum(["tv", "movie"]), reason: z.string() }))
+    .default([]),
   durationMs: z.number().int(),
 });
 
@@ -80,7 +85,6 @@ const plexUnaccountedSchema = z.object({
 // User-facing app setting: whether the manual "mark watched" controls are shown. Off by default — watch state
 // comes from the Plex sync, and the owner opts in to manual toggles from the admin page.
 const manualWatchedSchema = z.object({ enabled: z.boolean() });
-
 
 // Owner-configured download-source links for the Download view (torrent/tracker searches). Each source's URL —
 // domain, path, params — lives here, in runtime config, not the repo, so no download-source details are ever

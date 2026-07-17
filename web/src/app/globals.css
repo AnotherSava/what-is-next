@@ -22,12 +22,14 @@
   --color-good: #37b26b;
   --color-bad: #e5484d;
 
-  /* Type families — loaded by next/font (see layout.tsx), referenced here as Tailwind font utilities:
-     font-sans (body, default), font-display (titles/headings), font-narrow (episode/director sub), font-num (meta). */
+  /* Type families — loaded by next/font (see layout.tsx), referenced here as Tailwind font utilities: font-sans
+     (body, default), font-display (titles/headings), font-narrow (episode/director sub), font-num (meta),
+     font-mono (compact monospace for file paths / code snippets). */
   --font-sans: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: var(--font-space), ui-sans-serif, system-ui, sans-serif;
   --font-narrow: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-num: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 :root {
@@ -254,6 +256,41 @@ input::placeholder {
 .wn-gear:not(.wn-gear-on):hover,
 .wn-gear-on {
   transform: rotate(45deg);
+}
+
+/* Disclosure chevron (Settings refresh-errors list): a right-pointing chevron when collapsed, swapped for a
+   down-pointing one when its <details> is open. Driven by the [open] attribute (no :open pseudo dependency),
+   and by display-swap rather than a CSS transform (transforms on inline SVG proved unreliable here). */
+details[open] > summary .wn-disc-collapsed {
+  display: none;
+}
+details[open] > summary .wn-disc-expanded {
+  display: block;
+}
+
+/* Backup filename link (Settings) — clickable to download; on hover it brightens and underlines, matching the
+   design reference's .wn-dllink. Named classes (not Tailwind arbitrary hover utilities) so they generate reliably. */
+.wn-dl {
+  cursor: pointer;
+  text-underline-offset: 2px;
+  transition: color 0.13s ease;
+}
+.wn-dl:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-color: #55555f;
+}
+
+/* Backup download icon button — fills with the border surface and brightens on hover, like the design's .wn-icobtn. */
+.wn-icobtn {
+  color: var(--color-faint);
+  transition:
+    background 0.13s ease,
+    color 0.13s ease;
+}
+.wn-icobtn:hover {
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 /* Grid-density control — the slider is hidden until the grid icon is hovered. */

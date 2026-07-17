@@ -51,10 +51,22 @@ function revalidatePlex(): void {
   for (const p of ["/admin", "/shows", "/movies", "/"]) revalidatePath(p);
 }
 
-export async function syncPlexNow(): Promise<void> {
+export type SyncResult = { ok: true } | { ok: false; error: string };
+
+// A failing Plex call (bad/expired token, server unreachable) must not crash the admin page — catch it and hand the
+// reason back to the button to show inline. On success the route is revalidated, so the card's "Synced <when>"
+// result re-renders itself from the stored last-sync bookkeeping.
+export async function syncPlexNow(): Promise<SyncResult> {
   const owner = await requireOwner();
-  await syncPlexPresence(owner.id, "manual");
-  revalidatePlex();
+  try {
+    await syncPlexPresence(owner.id, "manual");
+    revalidatePlex();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Plex sync failed.";
+    const hint = /\b40[13]\b/.test(msg) ? " — check that PLEX_TOKEN is valid and current." : "";
+    return { ok: false, error: msg + hint };
+  }
 }
 
 export async function addSelectedPlexItems(formData: FormData): Promise<void> {
