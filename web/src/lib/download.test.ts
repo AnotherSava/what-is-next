@@ -74,6 +74,7 @@ describe("unwatchedInPlexCount", () => {
 describe("classifyDownloads", () => {
   const row = (title: string, lastWatchedAt: string | null, missingCount = 1): DownloadShow => ({
     showId: `id-${title}`,
+    slug: `id-${title}`,
     title,
     posterPath: null,
     isFavorite: false,

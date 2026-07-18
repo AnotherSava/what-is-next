@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { getPrisma } from "@/lib/db";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
@@ -9,22 +9,27 @@ import { getShowDetail, groupSummary } from "@/lib/shows";
 import { EpisodeChecklist } from "../_components/EpisodeChecklist";
 import { FavoriteStar, RefreshShowButton, TrackToggle } from "../_components/ShowControls";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const { id } = await params;
-  const item = await getPrisma().mediaItem.findFirst({ where: { id, mediaType: "tv" }, select: { title: true } });
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const item = await getPrisma().mediaItem.findFirst({
+    where: { mediaType: "tv", OR: [{ slug }, { id: slug }] },
+    select: { title: true },
+  });
   return { title: item?.title ?? "Show" };
 }
 
-export default async function ShowDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function ShowDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
   const [show, manualWatched, plexServerId] = await Promise.all([
-    getShowDetail(displayedUser.id, id),
+    getShowDetail(displayedUser.id, slug),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   if (!show) notFound();
+  // Canonicalise: an id-based (or otherwise non-slug) URL 308-redirects to /shows/<slug> once a slug exists.
+  if (show.slug && show.slug !== slug) redirect(`/shows/${show.slug}`);
 
   const { progress } = show;
   const summary = groupSummary(show.group, progress);

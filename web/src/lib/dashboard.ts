@@ -11,6 +11,7 @@ import { getFollowedShows } from "@/lib/shows";
 // A watchlist movie present in Plex — playable right now (the Movies column of "Watch next").
 export interface ReadyMovie {
   movieId: string;
+  slug: string | null; // URL slug for the detail link (falls back to movieId when unset)
   title: string;
   posterPath: string | null;
   releaseDate: string | null; // ISO date; only its year is rendered
@@ -25,6 +26,7 @@ export interface ReadyMovie {
 
 export interface BehindShow {
   showId: string;
+  slug: string | null; // URL slug for the detail link (falls back to showId when unset)
   title: string;
   posterPath: string | null;
   isFavorite: boolean;
@@ -53,6 +55,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
     .filter((m) => m.inPlex)
     .map((m) => ({
       movieId: m.id,
+      slug: m.slug,
       title: m.title,
       posterPath: m.posterPath,
       releaseDate: m.releaseDate,
@@ -94,6 +97,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
     const ms = lastWatchedMs.get(s.id);
     return {
       showId: s.id,
+      slug: s.slug,
       title: s.title,
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,

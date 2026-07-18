@@ -12,6 +12,7 @@ export type RecentCard =
       kind: "episode";
       key: string;
       id: string;
+      slug: string | null;
       title: string;
       posterPath: string | null;
       rating: number | null;
@@ -23,6 +24,7 @@ export type RecentCard =
       kind: "movie";
       key: string;
       id: string;
+      slug: string | null;
       title: string;
       posterPath: string | null;
       rating: number | null;
@@ -96,7 +98,7 @@ export function RecentView({ periods, canFavorite }: { periods: RecentPeriodData
                     id={it.id}
                     title={it.title}
                     posterPath={it.posterPath}
-                    detailHref={it.kind === "episode" ? `/shows/${it.id}` : `/movies/${it.id}`}
+                    detailHref={it.kind === "episode" ? `/shows/${it.slug ?? it.id}` : `/movies/${it.slug ?? it.id}`}
                     rating={it.rating}
                     isFavorite={it.isFavorite}
                     canFavorite={canFavorite}

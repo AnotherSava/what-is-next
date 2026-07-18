@@ -59,6 +59,7 @@ export interface TimelineEpisodeGroup {
   kind: "episode";
   key: string;
   mediaItemId: string;
+  slug: string | null; // show URL slug (falls back to mediaItemId)
   title: string;
   posterPath: string | null;
   imdbRating: number | null;
@@ -74,6 +75,7 @@ export interface TimelineMovie {
   kind: "movie";
   key: string;
   mediaItemId: string;
+  slug: string | null; // movie URL slug (falls back to mediaItemId)
   title: string;
   posterPath: string | null;
   imdbRating: number | null;
@@ -122,6 +124,7 @@ export async function getRecentTimeline(
         mediaItem: {
           select: {
             id: true,
+            slug: true,
             title: true,
             posterPath: true,
             imdbRating: true,
@@ -177,6 +180,7 @@ export async function getRecentTimeline(
           kind: "episode",
           key: gk,
           mediaItemId: r.mediaItem.id,
+          slug: r.mediaItem.slug,
           title: r.mediaItem.title,
           posterPath: r.mediaItem.posterPath,
           imdbRating: r.mediaItem.imdbRating,
@@ -197,6 +201,7 @@ export async function getRecentTimeline(
         kind: "movie",
         key: r.id,
         mediaItemId: r.mediaItem.id,
+        slug: r.mediaItem.slug,
         title: r.mediaItem.title,
         posterPath: r.mediaItem.posterPath,
         imdbRating: r.mediaItem.imdbRating,

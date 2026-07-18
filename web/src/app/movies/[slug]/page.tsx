@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PosterPlay } from "@/app/_components/PosterPlay";
 import { getPrisma } from "@/lib/db";
 import { displayDate, todayISO } from "@/lib/datetime";
@@ -9,22 +9,27 @@ import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session"
 import { getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { MarkWatchedControl, MovieFavoriteStar, UnmarkWatchedButton } from "../_components/MovieControls";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const { id } = await params;
-  const item = await getPrisma().mediaItem.findFirst({ where: { id, mediaType: "movie" }, select: { title: true } });
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const item = await getPrisma().mediaItem.findFirst({
+    where: { mediaType: "movie", OR: [{ slug }, { id: slug }] },
+    select: { title: true },
+  });
   return { title: item?.title ?? "Movie" };
 }
 
-export default async function MovieDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function MovieDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
   const [movie, manualWatched, plexServerId] = await Promise.all([
-    getMovieDetail(displayedUser.id, id),
+    getMovieDetail(displayedUser.id, slug),
     isManualWatchedEnabled(),
     isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
   ]);
   if (!movie) notFound();
+  // Canonicalise: an id-based (or otherwise non-slug) URL 308-redirects to /movies/<slug> once a slug exists.
+  if (movie.slug && movie.slug !== slug) redirect(`/movies/${movie.slug}`);
 
   const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
   const watchUrl = plexWatchUrl(plexServerId, movie.plexRatingKey);

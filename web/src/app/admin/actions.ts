@@ -21,7 +21,7 @@ export async function backupNow(): Promise<void> {
 export async function refreshShow(mediaItemId: string): Promise<void> {
   await requireOwner();
   await refreshOne(mediaItemId);
-  revalidatePath(`/shows/${mediaItemId}`);
+  revalidatePath("/shows/[slug]", "page"); // detail lives at /shows/<slug> now — revalidate the dynamic route
   revalidatePath("/shows");
   revalidatePath("/");
 }

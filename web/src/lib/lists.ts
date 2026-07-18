@@ -22,6 +22,7 @@ export async function getLists(userId: string): Promise<ListSummary[]> {
 export interface ListItemView {
   listItemId: string;
   mediaItemId: string;
+  slug: string | null; // URL slug for the detail link (falls back to mediaItemId when unset)
   mediaType: string;
   title: string;
   posterPath: string | null;
@@ -41,7 +42,7 @@ export async function getListDetail(userId: string, listId: string): Promise<Lis
     include: {
       items: {
         orderBy: [{ position: "asc" }, { addedAt: "asc" }],
-        include: { mediaItem: { select: { id: true, mediaType: true, title: true, posterPath: true } } },
+        include: { mediaItem: { select: { id: true, slug: true, mediaType: true, title: true, posterPath: true } } },
       },
     },
   });
@@ -53,6 +54,7 @@ export async function getListDetail(userId: string, listId: string): Promise<Lis
     items: list.items.map((it) => ({
       listItemId: it.id,
       mediaItemId: it.mediaItem.id,
+      slug: it.mediaItem.slug,
       mediaType: it.mediaItem.mediaType,
       title: it.mediaItem.title,
       posterPath: it.mediaItem.posterPath,

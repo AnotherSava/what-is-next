@@ -37,6 +37,7 @@ export default async function ShowsPage() {
       const n = s.progress.nextUp;
       return {
         id: s.id,
+        slug: s.slug,
         title: s.title,
         posterPath: s.posterPath,
         watchUrl: s.inPlex ? plexWatchUrl(plexServerId, s.plexRatingKey) : null,

@@ -8,6 +8,7 @@ import { getPlexPresenceKeys, isPlexConfigured } from "@/lib/plex";
 
 export interface MovieSummary {
   id: string;
+  slug: string | null; // URL slug for the detail link (falls back to id when unset)
   title: string;
   posterPath: string | null;
   releaseDate: string | null;
@@ -61,6 +62,7 @@ export async function getMovies(userId: string): Promise<MoviesView> {
     const isWatched = watchedSet.has(st.mediaItemId);
     const summary: MovieSummary = {
       id: st.mediaItem.id,
+      slug: st.mediaItem.slug,
       title: st.mediaItem.title,
       posterPath: st.mediaItem.posterPath,
       releaseDate: st.mediaItem.releaseDate,
@@ -87,6 +89,7 @@ export async function getMovies(userId: string): Promise<MoviesView> {
 
 export interface MovieDetail {
   id: string;
+  slug: string | null; // canonical URL slug; the page redirects an id-based URL to /movies/<slug>
   title: string;
   originalTitle: string | null;
   overview: string | null;
@@ -101,10 +104,13 @@ export interface MovieDetail {
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it
 }
 
-export async function getMovieDetail(userId: string, movieId: string): Promise<MovieDetail | null> {
+export async function getMovieDetail(userId: string, idOrSlug: string): Promise<MovieDetail | null> {
   const prisma = getPrisma();
-  const item = await prisma.mediaItem.findFirst({ where: { id: movieId, mediaType: "movie" } });
+  const item = await prisma.mediaItem.findFirst({
+    where: { mediaType: "movie", OR: [{ slug: idOrSlug }, { id: idOrSlug }] },
+  });
   if (!item) return null;
+  const movieId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
   const [state, seen, plexMovies] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: movieId } } }),
@@ -120,6 +126,7 @@ export async function getMovieDetail(userId: string, movieId: string): Promise<M
 
   return {
     id: item.id,
+    slug: item.slug,
     title: item.title,
     originalTitle: item.originalTitle,
     overview: item.overview,

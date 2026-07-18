@@ -36,6 +36,8 @@ model MediaItem {
   imdbId String?
 
   title         String
+  slug          String? // URL slug derived from title, unique per mediaType; regenerated when the title changes.
+  //                       Null until backfilled/first hydrated — the detail route falls back to the id then.
   originalTitle String?
   overview      String?
   releaseDate   String? // ISO date string (TMDB convention)
@@ -71,6 +73,7 @@ model MediaItem {
 
   @@unique([tvdbId, mediaType]) // TVDB numbers movies and series independently
   @@unique([tmdbId, mediaType]) // TMDB likewise — see Deviation 1 at the top of this file
+  @@unique([slug, mediaType]) // slug is unique within a media type; NULLs are distinct in SQLite, so unset rows coexist
   @@index([mediaType])
 }
 

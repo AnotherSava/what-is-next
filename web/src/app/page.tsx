@@ -82,7 +82,7 @@ function ShowCard({
       id={show.showId}
       title={show.title}
       posterPath={show.posterPath}
-      detailHref={`/shows/${show.showId}`}
+      detailHref={`/shows/${show.slug ?? show.showId}`}
       watchUrl={watchUrl}
       rating={show.imdbRating}
       isFavorite={show.isFavorite}
@@ -115,7 +115,7 @@ function MovieCard({
       id={movie.movieId}
       title={movie.title}
       posterPath={movie.posterPath}
-      detailHref={`/movies/${movie.movieId}`}
+      detailHref={`/movies/${movie.slug ?? movie.movieId}`}
       watchUrl={watchUrl}
       rating={movie.imdbRating}
       isFavorite={movie.isFavorite}

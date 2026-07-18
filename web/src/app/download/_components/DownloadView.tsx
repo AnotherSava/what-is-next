@@ -8,6 +8,7 @@ import { PosterCard, type DownloadOption } from "@/app/_components/PosterCard";
 export type DownloadShowCard = {
   kind: "show";
   id: string;
+  slug: string | null;
   title: string;
   posterPath: string | null;
   rating: number | null;
@@ -19,6 +20,7 @@ export type DownloadShowCard = {
 export type DownloadMovieCard = {
   kind: "movie";
   id: string;
+  slug: string | null;
   title: string;
   posterPath: string | null;
   rating: number | null;
@@ -87,7 +89,7 @@ export function DownloadView({
                   id={it.id}
                   title={it.title}
                   posterPath={it.posterPath}
-                  detailHref={it.kind === "show" ? `/shows/${it.id}` : `/movies/${it.id}`}
+                  detailHref={it.kind === "show" ? `/shows/${it.slug ?? it.id}` : `/movies/${it.slug ?? it.id}`}
                   rating={it.rating}
                   isFavorite={it.isFavorite}
                   canFavorite={canFavorite}

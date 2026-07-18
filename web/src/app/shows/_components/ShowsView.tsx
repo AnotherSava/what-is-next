@@ -10,6 +10,7 @@ import { PosterCard } from "@/app/_components/PosterCard";
 // area needs (rating/heart/play). `group` drives the status filter and which shelf it lands in.
 export type ShowCardData = {
   id: string;
+  slug: string | null;
   title: string;
   posterPath: string | null;
   watchUrl: string | null;
@@ -91,7 +92,7 @@ export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFa
                   id={s.id}
                   title={s.title}
                   posterPath={s.posterPath}
-                  detailHref={`/shows/${s.id}`}
+                  detailHref={`/shows/${s.slug ?? s.id}`}
                   watchUrl={s.watchUrl}
                   rating={s.rating}
                   isFavorite={s.isFavorite}

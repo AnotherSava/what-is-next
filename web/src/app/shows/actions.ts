@@ -11,8 +11,8 @@ import { requireOwner } from "@/lib/session";
 // is the security boundary; hidden buttons are only UX (brief §3.1). Watch state is written to the append-only
 // SeenEvent log with source "app"; "unmark" removes this user's events for the episode (a checklist toggle).
 
-function revalidateShow(showId: string): void {
-  revalidatePath(`/shows/${showId}`);
+function revalidateShow(): void {
+  revalidatePath("/shows/[slug]", "page"); // detail lives at /shows/<slug> now — revalidate the dynamic route
   revalidatePath("/shows");
   revalidatePath("/");
 }
@@ -40,7 +40,7 @@ export async function markEpisodeWatched(episodeId: string): Promise<void> {
   }
   await clearEpisodeSuppressions(prisma, owner.id, [episodeId]); // re-marking watched lifts any prior unmark override
   await ensureFollowed(owner.id, ep.mediaItemId);
-  revalidateShow(ep.mediaItemId);
+  revalidateShow();
 }
 
 export async function unmarkEpisodeWatched(episodeId: string): Promise<void> {
@@ -50,7 +50,7 @@ export async function unmarkEpisodeWatched(episodeId: string): Promise<void> {
   if (!ep) return;
   await prisma.seenEvent.deleteMany({ where: { userId: owner.id, episodeId } });
   await suppressWatch(prisma, owner.id, ep.mediaItemId, episodeId); // durable unmark: Plex won't re-import it
-  revalidateShow(ep.mediaItemId);
+  revalidateShow();
 }
 
 // Mark every aired episode of a season watched (includes the specials season when that's the one chosen).
@@ -68,7 +68,7 @@ export async function markSeasonWatched(showId: string, seasonNumber: number): P
     eps.filter((e) => hasAired(e.releaseDate, today)).map((e) => e.id),
   );
   await ensureFollowed(owner.id, showId);
-  revalidateShow(showId);
+  revalidateShow();
 }
 
 // Mark this episode and every earlier aired non-special episode watched ("watched up to here", brief §8.3).
@@ -95,7 +95,7 @@ export async function markWatchedUpTo(episodeId: string): Promise<void> {
     .map((e) => e.id);
   await createMissingSeen(owner.id, target.mediaItemId, upTo);
   await ensureFollowed(owner.id, target.mediaItemId);
-  revalidateShow(target.mediaItemId);
+  revalidateShow();
 }
 
 // Track / untrack the show (flips the one stored intent bit). Off + nothing watched → off-list (hidden); off +
@@ -107,7 +107,7 @@ export async function setTracking(showId: string, want: boolean): Promise<void> 
     create: { userId: owner.id, mediaItemId: showId, wantToWatch: want },
     update: { wantToWatch: want },
   });
-  revalidateShow(showId);
+  revalidateShow();
 }
 
 export async function toggleFavorite(showId: string): Promise<void> {
@@ -122,7 +122,7 @@ export async function toggleFavorite(showId: string): Promise<void> {
     create: { userId: owner.id, mediaItemId: showId, wantToWatch: true, isFavorite: true },
     update: { isFavorite: !current?.isFavorite },
   });
-  revalidateShow(showId);
+  revalidateShow();
 }
 
 // Bulk-create SeenEvents for the given episodes, skipping any this user has already logged.

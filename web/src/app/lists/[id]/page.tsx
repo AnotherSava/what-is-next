@@ -63,7 +63,7 @@ export default async function ListDetailPage({ params }: { params: Promise<{ id:
             >
               <Poster path={it.posterPath} alt={it.title} width={40} height={60} size="w185" />
               <Link
-                href={it.mediaType === "tv" ? `/shows/${it.mediaItemId}` : "/movies"}
+                href={it.mediaType === "tv" ? `/shows/${it.slug ?? it.mediaItemId}` : "/movies"}
                 className="flex-1 truncate font-medium hover:underline"
               >
                 {it.title}

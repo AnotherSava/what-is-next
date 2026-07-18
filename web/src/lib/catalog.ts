@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { getOmdb, isOmdbConfigured } from "@/lib/omdb";
+import { syncSlug } from "@/lib/slug";
 import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
 
 // Which external API a catalog row is hydrated from. Drives where external ids are written (tmdbId vs tvdbId)
@@ -184,6 +185,7 @@ export async function hydrateShowByTmdbId(
     create: data,
     update: data,
   });
+  await syncSlug(prisma, item.id);
   const complete = await hydrateSeasonsFromDetail(prisma, tmdb, item.id, detail);
   if (!complete) await prisma.mediaItem.update({ where: { id: item.id }, data: { needsDetails: true } });
   return item.id;
@@ -223,5 +225,6 @@ export async function hydrateMovieByTmdbId(
     create: data,
     update: data,
   });
+  await syncSlug(prisma, item.id);
   return item.id;
 }

@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { upsertCatalogSeason } from "@/lib/catalog";
+import { syncSlug } from "@/lib/slug";
 import type { TvdbClient } from "./client";
 import { tvdbImageUrl } from "./images";
 import type { TvdbEpisode, TvdbMovieExtended, TvdbSeriesExtended } from "./schemas";
@@ -125,6 +126,7 @@ export async function hydrateShowByTvdbId(
     create: data,
     update: data,
   });
+  await syncSlug(prisma, item.id);
   for (const season of groupEpisodesIntoSeasons(series, episodes)) {
     await upsertCatalogSeason(prisma, item.id, season.season_number, season, undefined, "tvdb");
   }
@@ -154,5 +156,6 @@ export async function hydrateMovieByTvdbId(
     create: data,
     update: data,
   });
+  await syncSlug(prisma, item.id);
   return item.id;
 }

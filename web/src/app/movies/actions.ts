@@ -9,10 +9,10 @@ import { requireOwner } from "@/lib/session";
 // vs "watchlist" is derived from that log. wantToWatch keeps a movie on the watchlist while unwatched; unmarking
 // a watched movie returns it there.
 
-function revalidateMovies(movieId?: string): void {
+function revalidateMovies(): void {
   revalidatePath("/movies");
   revalidatePath("/");
-  if (movieId) revalidatePath(`/movies/${movieId}`);
+  revalidatePath("/movies/[slug]", "page"); // detail lives at /movies/<slug> now — revalidate the dynamic route
 }
 
 // Remove a movie from the watchlist. Movies have no off-list/Stopped state (unlike shows), so tracking is just
@@ -21,7 +21,7 @@ function revalidateMovies(movieId?: string): void {
 export async function untrackMovie(movieId: string): Promise<void> {
   const owner = await requireOwner();
   await getPrisma().userMediaState.deleteMany({ where: { userId: owner.id, mediaItemId: movieId } });
-  revalidateMovies(movieId);
+  revalidateMovies();
 }
 
 export async function markMovieWatched(movieId: string, watchedAtISO?: string): Promise<void> {
@@ -45,7 +45,7 @@ export async function markMovieWatched(movieId: string, watchedAtISO?: string): 
     update: {},
   });
   await clearMovieSuppression(prisma, owner.id, movieId); // re-marking watched lifts any prior unmark override
-  revalidateMovies(movieId);
+  revalidateMovies();
 }
 
 export async function unmarkMovieWatched(movieId: string): Promise<void> {
@@ -59,7 +59,7 @@ export async function unmarkMovieWatched(movieId: string): Promise<void> {
     create: { userId: owner.id, mediaItemId: movieId, wantToWatch: true },
     update: { wantToWatch: true },
   });
-  revalidateMovies(movieId);
+  revalidateMovies();
 }
 
 export async function toggleMovieFavorite(movieId: string): Promise<void> {
@@ -74,7 +74,7 @@ export async function toggleMovieFavorite(movieId: string): Promise<void> {
     create: { userId: owner.id, mediaItemId: movieId, wantToWatch: true, isFavorite: true },
     update: { isFavorite: !current?.isFavorite },
   });
-  revalidateMovies(movieId);
+  revalidateMovies();
 }
 
 function parseDate(iso: string | undefined): Date | null {

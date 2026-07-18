@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { hydrateMovieByTmdbId, hydrateShowByTmdbId } from "@/lib/catalog";
 import { getPrisma } from "@/lib/db";
 import { requireOwner } from "@/lib/session";
+import { syncSlug } from "@/lib/slug";
 import { getTmdb } from "@/lib/tmdb";
 
 // Add a searched title (brief §8.5): create a catalog stub + a UserMediaState (planned by default), then
@@ -25,6 +26,7 @@ export async function addTitle(input: {
     create: { tmdbId, mediaType, title, posterPath, needsDetails: true },
     update: {}, // never clobber an already-hydrated catalog row
   });
+  await syncSlug(prisma, item.id); // give the stub a slug now; hydration re-syncs it if the title changes
   await prisma.userMediaState.upsert({
     where: { userId_mediaItemId: { userId: owner.id, mediaItemId: item.id } },
     create: { userId: owner.id, mediaItemId: item.id, wantToWatch: true },

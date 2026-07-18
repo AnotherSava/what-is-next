@@ -14,6 +14,7 @@ import { getFollowedShows } from "@/lib/shows";
 
 export interface DownloadShow {
   showId: string;
+  slug: string | null; // URL slug for the detail link (falls back to showId when unset)
   title: string;
   posterPath: string | null;
   isFavorite: boolean;
@@ -29,6 +30,7 @@ export interface DownloadShow {
 // counterpart of DownloadShow; no episode/missing-count fields since a movie is a single title.
 export interface DownloadMovie {
   movieId: string;
+  slug: string | null; // URL slug for the detail link (falls back to movieId when unset)
   title: string;
   posterPath: string | null;
   releaseDate: string | null; // ISO date; only its year is rendered
@@ -100,6 +102,7 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
     .filter((m) => !m.inPlex && hasAired(m.releaseDate, today))
     .map((m) => ({
       movieId: m.id,
+      slug: m.slug,
       title: m.title,
       posterPath: m.posterPath,
       releaseDate: m.releaseDate,
@@ -170,6 +173,7 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
     const missingSeasons = [...new Set(missing.map((e) => e.seasonNumber))].sort((a, b) => a - b);
     const row: DownloadShow = {
       showId: s.id,
+      slug: s.slug,
       title: s.title,
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,

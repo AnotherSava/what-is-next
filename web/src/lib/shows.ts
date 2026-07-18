@@ -18,6 +18,7 @@ import {
 
 export interface ShowSummary {
   id: string;
+  slug: string | null; // URL slug for the detail link (falls back to id when unset)
   title: string;
   posterPath: string | null;
   status: string | null;
@@ -93,6 +94,7 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         : null;
       return {
         id: st.mediaItem.id,
+        slug: st.mediaItem.slug,
         title: st.mediaItem.title,
         posterPath: st.mediaItem.posterPath,
         status: st.mediaItem.status,
@@ -174,6 +176,7 @@ export interface ShowDetailSeason {
 
 export interface ShowDetail {
   id: string;
+  slug: string | null; // canonical URL slug; the page redirects an id-based URL to /shows/<slug>
   title: string;
   originalTitle: string | null;
   overview: string | null;
@@ -192,18 +195,19 @@ export interface ShowDetail {
 
 export async function getShowDetail(
   userId: string,
-  showId: string,
+  idOrSlug: string,
   today: string = todayISO(),
 ): Promise<ShowDetail | null> {
   const prisma = getPrisma();
   const item = await prisma.mediaItem.findFirst({
-    where: { id: showId, mediaType: "tv" },
+    where: { mediaType: "tv", OR: [{ slug: idOrSlug }, { id: idOrSlug }] },
     include: {
       seasons: { orderBy: { seasonNumber: "asc" } },
       episodes: { orderBy: [{ seasonNumber: "asc" }, { episodeNumber: "asc" }] },
     },
   });
   if (!item) return null;
+  const showId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
   const [state, seen, plexPresence] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: showId } } }),
@@ -276,6 +280,7 @@ export async function getShowDetail(
 
   return {
     id: item.id,
+    slug: item.slug,
     title: item.title,
     originalTitle: item.originalTitle,
     overview: item.overview,

@@ -18,6 +18,7 @@ export default async function MoviesPage() {
 
   const toCard = (m: MovieSummary, list: "watchlist" | "watched"): MovieCardData => ({
     id: m.id,
+    slug: m.slug,
     title: m.title,
     posterPath: m.posterPath,
     watchUrl: m.inPlex ? plexWatchUrl(plexServerId, m.plexRatingKey) : null,

@@ -9,6 +9,7 @@ import { PosterCard } from "@/app/_components/PosterCard";
 // (Planned = watchlist, Watched = watched).
 export type MovieCardData = {
   id: string;
+  slug: string | null;
   title: string;
   posterPath: string | null;
   watchUrl: string | null;
@@ -66,7 +67,7 @@ export function MoviesView({ movies, canFavorite }: { movies: MovieCardData[]; c
                   id={m.id}
                   title={m.title}
                   posterPath={m.posterPath}
-                  detailHref={`/movies/${m.id}`}
+                  detailHref={`/movies/${m.slug ?? m.id}`}
                   watchUrl={m.watchUrl}
                   rating={m.rating}
                   isFavorite={m.isFavorite}

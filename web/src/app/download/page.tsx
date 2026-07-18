@@ -27,6 +27,7 @@ export default async function DownloadPage() {
   const showCard = (s: DownloadShow): DownloadShowCard => ({
     kind: "show",
     id: s.showId,
+    slug: s.slug,
     title: s.title,
     posterPath: s.posterPath,
     rating: s.imdbRating,
@@ -37,6 +38,7 @@ export default async function DownloadPage() {
   const movieCard = (m: DownloadMovie): DownloadMovieCard => ({
     kind: "movie",
     id: m.movieId,
+    slug: m.slug,
     title: m.title,
     posterPath: m.posterPath,
     rating: m.imdbRating,
