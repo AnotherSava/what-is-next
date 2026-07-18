@@ -45,10 +45,10 @@ export function PosterCard({
 
   return (
     <div
-      className="wn-posterwrap wn-card relative cursor-pointer overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]"
+      className="wn-posterwrap wn-card relative overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]"
       style={{ boxShadow: "0 16px 38px -22px rgba(0,0,0,0.85)" }}
     >
-      <div className="relative aspect-[2/3] overflow-hidden">
+      <div className="wn-postermedia relative aspect-[2/3] overflow-hidden">
         <CardPoster path={posterPath} alt={title} />
 
         {/* Click target covering the poster: opens Plex when playable, else navigates to the detail page. It sits
@@ -115,7 +115,7 @@ export function PosterCard({
 
       {/* The text body always links to the detail page — the poster may instead play in Plex, so this keeps the
           show/movie page (seasons, tracking, favouriting) reachable from every card. */}
-      <Link href={detailHref} className="block px-[13px] pt-3 pb-[13px]">
+      <Link href={detailHref} className="block cursor-default px-[13px] pt-3 pb-[13px]">
         {children}
       </Link>
     </div>

@@ -126,7 +126,8 @@ input::placeholder {
   opacity: 1;
 }
 
-/* Play overlay — big centred triangle on a dark scrim, revealed on hover for in-Plex (playable) items. */
+/* Play overlay — big centred triangle on a dark scrim, revealed when the poster (not the title) is hovered
+   for in-Plex (playable) items. */
 .wn-play-overlay {
   position: absolute;
   inset: 0;
@@ -138,7 +139,7 @@ input::placeholder {
   z-index: 2;
   background: rgba(8, 8, 10, 0.44);
 }
-.wn-posterwrap:hover .wn-play-overlay {
+.wn-postermedia:hover .wn-play-overlay {
   opacity: 1;
 }
 
@@ -157,7 +158,7 @@ input::placeholder {
   z-index: 2;
   padding: 14px;
 }
-.wn-posterwrap:hover .wn-dlmenu {
+.wn-postermedia:hover .wn-dlmenu {
   opacity: 1;
 }
 .wn-dlopt {
@@ -268,14 +269,17 @@ details[open] > summary .wn-disc-expanded {
   display: block;
 }
 
-/* Backup filename link (Settings) — clickable to download; on hover it brightens and underlines, matching the
-   design reference's .wn-dllink. Named classes (not Tailwind arbitrary hover utilities) so they generate reliably. */
-.wn-dl {
+/* Text-link hover treatment — brightens and underlines on hover. Shared by the Settings backup filename link
+   (.wn-dl) and the poster-card show/movie title (.wn-titlelink) so the affordance reads identically. Named
+   classes (not Tailwind arbitrary hover utilities) so they generate reliably. */
+.wn-dl,
+.wn-titlelink {
   cursor: pointer;
   text-underline-offset: 2px;
   transition: color 0.13s ease;
 }
-.wn-dl:hover {
+.wn-dl:hover,
+.wn-titlelink:hover {
   color: var(--color-text);
   text-decoration: underline;
   text-decoration-color: #55555f;

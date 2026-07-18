@@ -29,7 +29,7 @@ export function GroupHeading({ color, label, count }: { color: string; label: st
 export function CardTitle({ title, aside }: { title: string; aside?: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-display truncate text-[15px] font-bold">{title}</span>
+      <span className="wn-titlelink font-display truncate text-[15px] font-bold">{title}</span>
       {aside != null && aside !== "" && (
         <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]">{aside}</span>
       )}
