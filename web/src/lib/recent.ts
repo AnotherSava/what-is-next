@@ -217,5 +217,23 @@ export async function getRecentTimeline(
     group.fullSeason = total > 0 && sorted.length >= total;
   }
 
+  // Bulk imports stamp a whole season's episodes with one timestamp, so two seasons of the same show can land a
+  // second apart and sort in reverse (S3 ahead of S4). Cross-show recency stays as-is; we only reorder a show's own
+  // seasons into the slots it already occupies, newest season first, so they read in season order.
+  for (const p of periods) {
+    const slotsByShow = new Map<string, number[]>();
+    p.items.forEach((it, i) => {
+      if (it.kind !== "episode") return;
+      const slots = slotsByShow.get(it.mediaItemId) ?? [];
+      slots.push(i);
+      slotsByShow.set(it.mediaItemId, slots);
+    });
+    for (const slots of slotsByShow.values()) {
+      if (slots.length < 2) continue;
+      const groups = slots.map((i) => p.items[i] as TimelineEpisodeGroup).sort((a, b) => b.seasonNumber - a.seasonNumber);
+      slots.forEach((i, k) => (p.items[i] = groups[k]));
+    }
+  }
+
   return periods;
 }
