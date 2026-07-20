@@ -1,11 +1,13 @@
 "use client";
 
-import { useOptimistic, useTransition, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { toggleMovieFavorite } from "@/app/movies/actions";
 import { toggleFavorite as toggleShowFavorite } from "@/app/shows/actions";
 import { posterUrl } from "@/lib/images";
+import { RatingBadge } from "./cardUi";
+import { useFavoriteToggle } from "./useFavoriteToggle";
 
 // The shared poster-grid card (design reference): a 2:3 poster with an IMDb ★ rating chip (top-left) and a
 // favourite heart (top-right), over which a play triangle (in-Plex items) or a download-source menu (Download view)
@@ -97,18 +99,7 @@ export function PosterCard({
           </span>
         )}
 
-        {rating != null && (
-          <span
-            className="pointer-events-none absolute top-[9px] left-[9px] z-[2] inline-flex h-[22px] items-center gap-1 font-num text-[15px] font-semibold tabular-nums"
-            style={{
-              color: "#f0f0f3",
-              textShadow: "0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7)",
-              WebkitTextStroke: "0.5px rgba(0,0,0,0.4)",
-            }}
-          >
-            ★ {rating.toFixed(1)}
-          </span>
-        )}
+        {rating != null && <RatingBadge value={rating} className="absolute top-[9px] left-[9px] z-[2] h-[22px]" />}
 
         <FavoriteHeart mediaType={mediaType} id={id} isFavorite={isFavorite} canFavorite={canFavorite} />
       </div>
@@ -156,14 +147,14 @@ function FavoriteHeart({
   isFavorite: boolean;
   canFavorite: boolean;
 }) {
-  const [optimistic, setOptimistic] = useOptimistic(isFavorite);
-  const [, startTransition] = useTransition();
+  const { favorited, onToggle, ariaLabel } = useFavoriteToggle(isFavorite, () =>
+    mediaType === "tv" ? toggleShowFavorite(id) : toggleMovieFavorite(id),
+  );
 
   const heartStyle = {
-    color: optimistic ? "var(--color-behind)" : "#c4c4cc",
+    color: favorited ? "var(--color-behind)" : "#c4c4cc",
     WebkitTextStroke: "0.7px rgba(0,0,0,0.22)",
   } as const;
-  const glyph = optimistic ? "♥" : "♡";
   const posCls = "absolute top-[9px] right-[9px] z-[3] text-[22px] leading-[22px]";
 
   if (!canFavorite) {
@@ -178,20 +169,16 @@ function FavoriteHeart({
   return (
     <button
       type="button"
-      aria-label={optimistic ? "Remove from favourites" : "Add to favourites"}
-      aria-pressed={optimistic}
-      className={`wn-heart ${posCls} ${optimistic ? "" : "fav0"}`}
+      aria-label={ariaLabel}
+      aria-pressed={favorited}
+      className={`wn-heart ${posCls} ${favorited ? "" : "fav0"}`}
       style={heartStyle}
       onClick={(e) => {
         e.stopPropagation();
-        startTransition(async () => {
-          setOptimistic(!optimistic);
-          if (mediaType === "tv") await toggleShowFavorite(id);
-          else await toggleMovieFavorite(id);
-        });
+        onToggle();
       }}
     >
-      {glyph}
+      {favorited ? "♥" : "♡"}
     </button>
   );
 }

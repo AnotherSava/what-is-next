@@ -25,6 +25,24 @@ export function GroupHeading({ color, label, count }: { color: string; label: st
   );
 }
 
+// The IMDb ★ rating chip overlaid on a poster (grid card + movie-detail hero). One component so the star glyph,
+// number formatting, and the on-artwork legibility treatment (bright text + shadow + hairline stroke) can't drift
+// between the two places it appears. The caller positions it via `className` (corner offset, z-index, height).
+export function RatingBadge({ value, className = "" }: { value: number; className?: string }) {
+  return (
+    <span
+      className={`pointer-events-none inline-flex items-center gap-1 font-num text-[15px] font-semibold tabular-nums ${className}`}
+      style={{
+        color: "#f0f0f3",
+        textShadow: "0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7)",
+        WebkitTextStroke: "0.5px rgba(0,0,0,0.4)",
+      }}
+    >
+      ★ {value.toFixed(1)}
+    </span>
+  );
+}
+
 // The card's title row: bold title (truncates) with an optional muted aside pinned right (a year, "N ago", …).
 export function CardTitle({ title, aside }: { title: string; aside?: ReactNode }) {
   return (

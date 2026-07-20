@@ -38,6 +38,16 @@ export function todayISO(now: Date = new Date(), timeZone: string | undefined = 
   return isoDate(now, timeZone);
 }
 
+// A moment's month and year: "Jun 2026" (in the given timezone, default TZ env). For compact date stamps where
+// the day would be noise — e.g. the movie detail poster's "WATCHED · JUN 2026".
+export function displayMonthYear(date: Date, timeZone: string | undefined = process.env.TZ): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone, month: "short", year: "numeric" }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+  }
+}
+
 // Date N days from `from`, as "YYYY-MM-DD" in the given timezone. Used for the "next 2 weeks" upcoming window.
 export function isoDatePlusDays(days: number, from: Date = new Date(), timeZone?: string): string {
   const shifted = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
