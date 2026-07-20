@@ -21,6 +21,13 @@ export function SearchBox({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          // Esc clears the box (keeping focus, so you can keep typing).
+          if (e.key === "Escape" && value) {
+            e.preventDefault();
+            onChange("");
+          }
+        }}
         placeholder={placeholder}
         className="w-full border-none bg-transparent text-[13px] text-[var(--color-text)] outline-none"
       />
