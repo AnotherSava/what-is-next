@@ -4,6 +4,7 @@ import type { PlexCandidate } from "@/lib/settings";
 import type { TmdbClient } from "@/lib/tmdb";
 import type { PlexClient } from "./client";
 import { parseGuids, type PlexEpisode } from "./schemas";
+import { deriveVideoSource } from "./source";
 
 // Plex sync core (Plex integration). Read-only against Plex; writes PlexPresence (full snapshot) + SeenEvent rows
 // (source "plex") for watch state, plus — on explicit add — new UserMediaState rows. Explicit userId (brief §5a
@@ -24,6 +25,10 @@ export interface PresenceRow {
   mediaItemId: string;
   seasonNumber: number | null;
   plexRatingKey: string; // the show/movie's Plex ratingKey — lets the UI deep-link into Plex to watch it
+  videoResolution?: string | null; // movies only: source resolution ("4k"|"1080"|…) from Plex; absent for shows
+  hdrFormat?: string | null; // movies only: combined HDR label ("Dolby Vision · HDR10"|…); null/absent = SDR
+  audioTracks?: string | null; // movies only: audio languages as JSON [{lang,atmos}]; absent for shows
+  subtitleLangs?: string | null; // movies only: subtitle languages as JSON string[]; absent for shows
 }
 
 // A watched item observed in Plex, to be reconciled into the SeenEvent log. seasonNumber/episodeNumber null = a
@@ -199,7 +204,18 @@ export async function scanPlex(
       } else {
         if (match) {
           matchedMovies++;
-          presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey });
+          // Capture the source's resolution + HDR for the movie page. One lightweight metadata call per matched
+          // movie — the movie counterpart of getShowSeasons above (which shows already do unconditionally per sync).
+          const source = deriveVideoSource(await plex.getItemMedia(item.ratingKey));
+          presenceRows.push({
+            mediaItemId: match,
+            seasonNumber: null,
+            plexRatingKey: item.ratingKey,
+            videoResolution: source.videoResolution,
+            hdrFormat: source.hdrFormat,
+            audioTracks: source.audioTracks.length ? JSON.stringify(source.audioTracks) : null,
+            subtitleLangs: source.subtitleLangs.length ? JSON.stringify(source.subtitleLangs) : null,
+          });
           // Continuous watched-sync: a watched movie already in the catalog gets a plex-sourced SeenEvent.
           if ((item.viewCount ?? 0) > 0)
             watchedSignals.push({
@@ -354,10 +370,28 @@ export async function applyWatched(prisma: PrismaClient, userId: string, signals
 export async function applyPresence(prisma: PrismaClient, userId: string, rows: PresenceRow[]): Promise<boolean> {
   const existing = await prisma.plexPresence.findMany({
     where: { userId },
-    select: { mediaItemId: true, seasonNumber: true, plexRatingKey: true },
+    select: {
+      mediaItemId: true,
+      seasonNumber: true,
+      plexRatingKey: true,
+      videoResolution: true,
+      hdrFormat: true,
+      audioTracks: true,
+      subtitleLangs: true,
+    },
   });
-  const sig = (r: { mediaItemId: string; seasonNumber: number | null; plexRatingKey: string | null }) =>
-    `${r.mediaItemId}|${r.seasonNumber}|${r.plexRatingKey}`;
+  // Include the source fields so a quality change (e.g. a 1080p file swapped for 4K, or a new audio track) also
+  // counts as a delta and refreshes an open page, not just presence appearing/disappearing.
+  const sig = (r: {
+    mediaItemId: string;
+    seasonNumber: number | null;
+    plexRatingKey: string | null;
+    videoResolution?: string | null;
+    hdrFormat?: string | null;
+    audioTracks?: string | null;
+    subtitleLangs?: string | null;
+  }) =>
+    `${r.mediaItemId}|${r.seasonNumber}|${r.plexRatingKey}|${r.videoResolution ?? ""}|${r.hdrFormat ?? ""}|${r.audioTracks ?? ""}|${r.subtitleLangs ?? ""}`;
   const before = new Set(existing.map(sig));
   const after = new Set(rows.map(sig));
   const changed = before.size !== after.size || [...after].some((s) => !before.has(s));
@@ -370,6 +404,10 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
         mediaItemId: r.mediaItemId,
         seasonNumber: r.seasonNumber,
         plexRatingKey: r.plexRatingKey,
+        videoResolution: r.videoResolution ?? null,
+        hdrFormat: r.hdrFormat ?? null,
+        audioTracks: r.audioTracks ?? null,
+        subtitleLangs: r.subtitleLangs ?? null,
       })),
     });
   }

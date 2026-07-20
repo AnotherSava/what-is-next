@@ -49,6 +49,8 @@ model MediaItem {
   tmdbRating    Float?
   imdbRating    Float? // IMDb community score (0–10), fetched from OMDb by imdbId. Null when unresolved/unfetched.
   director      String? // movie director(s) from TMDB credits, comma-joined; null for TV / unresolved / unfetched.
+  cast          String? // top-billed movie cast from TMDB credits as JSON [{name,character,profilePath}] in billing
+  //                       order; null for TV / unresolved / unfetched. Parsed via lib/cast.ts (parseCast).
 
   numberOfSeasons  Int? // denormalized for list views; recomputed on refresh
   numberOfEpisodes Int?
@@ -248,6 +250,11 @@ model PlexPresence {
   plexRatingKey String? // the item's Plex ratingKey (the show/movie, not the season) — used to deep-link into
   //                        Plex to watch it. Same value on every row of a show; null on rows written before this
   //                        column existed, until the next sync back-fills them.
+  videoResolution String? // movie source resolution from Plex ("4k"|"1080"|…); null for shows/seasons or unknown.
+  //                          Populated per matched movie each sync (see sync.ts deriveVideoSource); movie page rows.
+  hdrFormat       String? // movie HDR format, combined: "Dolby Vision · HDR10" | "HDR10" | "HLG"; null = SDR. Movies only.
+  audioTracks     String? // movie audio languages as JSON [{lang,atmos}] (best copy, in track order). Movies only.
+  subtitleLangs   String? // movie subtitle languages as JSON string[] (best copy, in track order). Movies only.
   updatedAt     DateTime  @updatedAt
 
   @@index([userId, mediaItemId])

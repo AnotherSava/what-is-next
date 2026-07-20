@@ -35,6 +35,31 @@ export const plexItemsResponseSchema = z.object({
   MediaContainer: z.object({ Metadata: z.array(plexItemSchema).default([]) }),
 });
 
+// GET /library/metadata/{ratingKey} → a single item's full detail. We read only the media/stream fields the movie
+// page's source strip needs: the resolution and the HDR format. A movie can carry several Media (versions/files) —
+// deriveVideoSource (source.ts) picks the best. HDR lives on the video Stream's colour fields, not the Media.
+const plexStreamSchema = z.object({
+  streamType: z.number().int(), // 1 = video, 2 = audio, 3 = subtitle
+  colorTrc: z.string().nullish(), // transfer fn: "smpte2084" = HDR10 (PQ), "arib-std-b67" = HLG, else SDR (bt709)
+  DOVIPresent: z.boolean().nullish(), // Dolby Vision present on this (video) stream
+  language: z.string().nullish(), // human language name, e.g. "English" (audio + subtitle rows)
+  title: z.string().nullish(), // ↓ these three are scanned for "Atmos" to flag an Atmos audio track
+  displayTitle: z.string().nullish(),
+  extendedDisplayTitle: z.string().nullish(),
+});
+const plexPartSchema = z.object({ Stream: z.array(plexStreamSchema).nullish() });
+export const plexMediaSchema = z.object({
+  videoResolution: z.string().nullish(), // "4k" | "1080" | "720" | "480" | "sd"
+  height: z.number().int().nullish(), // pixel height — the tiebreak for picking the best of several versions
+  Part: z.array(plexPartSchema).nullish(),
+});
+export type PlexMedia = z.infer<typeof plexMediaSchema>;
+export const plexMetadataDetailResponseSchema = z.object({
+  MediaContainer: z.object({
+    Metadata: z.array(z.object({ Media: z.array(plexMediaSchema).nullish() })).default([]),
+  }),
+});
+
 // GET /library/metadata/{ratingKey}/children → a show's seasons. index = season number.
 export const plexSeasonSchema = z.object({
   ratingKey: z.string(),

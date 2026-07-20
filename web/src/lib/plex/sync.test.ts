@@ -83,6 +83,26 @@ function fakePlex(): PlexClient {
         { parentIndex: 1, index: 2, viewCount: 0 },
       ];
     },
+    async getItemMedia(ratingKey: string) {
+      // The matched movie (m1) is a 1080p SDR copy with one English audio + subtitle track; else no media.
+      if (ratingKey === "m1")
+        return [
+          {
+            videoResolution: "1080",
+            height: 1080,
+            Part: [
+              {
+                Stream: [
+                  { streamType: 1, colorTrc: "bt709" },
+                  { streamType: 2, language: "English" },
+                  { streamType: 3, language: "English" },
+                ],
+              },
+            ],
+          },
+        ];
+      return [];
+    },
   } as unknown as PlexClient;
 }
 
@@ -141,7 +161,16 @@ describe("scanPlex", () => {
     expect(r.presenceRows).toEqual(
       expect.arrayContaining([
         { mediaItemId: "mi-show", seasonNumber: 1, plexRatingKey: "s1" },
-        { mediaItemId: "mi-movie", seasonNumber: null, plexRatingKey: "m1" },
+        // The matched movie also carries its Plex source (resolution/HDR/audio/subtitles) captured via getItemMedia.
+        {
+          mediaItemId: "mi-movie",
+          seasonNumber: null,
+          plexRatingKey: "m1",
+          videoResolution: "1080",
+          hdrFormat: null,
+          audioTracks: '[{"lang":"English","atmos":false}]',
+          subtitleLangs: '["English"]',
+        },
       ]),
     );
     expect(r.candidates.map((c) => c.title).sort()).toEqual(["New Movie", "New Show"]);
@@ -194,6 +223,12 @@ describe("applyPresence", () => {
     // The ratingKey is persisted so the UI can deep-link into Plex to watch it.
     expect(rows.find((x) => x.mediaItemId === "mi-show")?.plexRatingKey).toBe("s1");
     expect(rows.find((x) => x.mediaItemId === "mi-movie")?.plexRatingKey).toBe("m1");
+    // The movie's Plex source (resolution/HDR/audio/subtitles) is persisted for the movie page's spec rows.
+    const movieRow = rows.find((x) => x.mediaItemId === "mi-movie");
+    expect(movieRow?.videoResolution).toBe("1080");
+    expect(movieRow?.hdrFormat).toBeNull();
+    expect(movieRow?.audioTracks).toBe('[{"lang":"English","atmos":false}]');
+    expect(movieRow?.subtitleLangs).toBe('["English"]');
   });
 
   it("is a full snapshot — re-applying replaces prior rows", async () => {

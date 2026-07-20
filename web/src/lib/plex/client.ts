@@ -3,10 +3,12 @@ import {
   plexEpisodesResponseSchema,
   plexIdentitySchema,
   plexItemsResponseSchema,
+  plexMetadataDetailResponseSchema,
   plexSeasonsResponseSchema,
   plexSectionsResponseSchema,
   type PlexEpisode,
   type PlexItem,
+  type PlexMedia,
   type PlexSeason,
   type PlexSection,
 } from "./schemas";
@@ -70,6 +72,16 @@ export class PlexClient {
       plexItemsResponseSchema,
     );
     return data.MediaContainer.Metadata;
+  }
+
+  // An item's Media list (versions/files) with per-stream detail — the source of a movie's resolution + HDR. One
+  // lightweight metadata call per item, mirroring getShowSeasons for shows (see sync.ts's movie branch).
+  async getItemMedia(ratingKey: string): Promise<PlexMedia[]> {
+    const data = await this.get(
+      `/library/metadata/${encodeURIComponent(ratingKey)}`,
+      plexMetadataDetailResponseSchema,
+    );
+    return data.MediaContainer.Metadata[0]?.Media ?? [];
   }
 
   // A show's seasons (index = season number, leafCount/viewedLeafCount = episode totals).

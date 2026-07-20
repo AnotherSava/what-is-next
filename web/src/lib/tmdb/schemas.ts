@@ -48,8 +48,19 @@ const tmdbExternalIdsSchema = z.object({
   tvdb_id: z.number().int().nullish(),
 });
 
-// Credits (append_to_response=credits) — we only read the crew to pick out the director(s).
+// Credits (append_to_response=credits) — crew gives the director(s); cast (in billing order) the top-billed
+// actors shown on the movie detail page. `order` is TMDB's billing rank (0 = top-billed).
 const tmdbCreditsSchema = z.object({
+  cast: z
+    .array(
+      z.object({
+        name: z.string().nullish(),
+        character: z.string().nullish(),
+        profile_path: z.string().nullish(),
+        order: z.number().int().nullish(),
+      }),
+    )
+    .nullish(),
   crew: z.array(z.object({ job: z.string().nullish(), name: z.string().nullish() })).nullish(),
 });
 

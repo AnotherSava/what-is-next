@@ -1,5 +1,6 @@
+import { type CastMember, parseCast } from "@/lib/cast";
 import { getPrisma } from "@/lib/db";
-import { getPlexPresenceKeys, isPlexConfigured } from "@/lib/plex";
+import { type AudioTrack, getMoviePlexPresence, getPlexPresenceKeys, isPlexConfigured } from "@/lib/plex";
 
 // Read-side data layer for /movies (brief §8.4). A movie is "watched" iff it has a SeenEvent (episodeId null)
 // — the append-only log is the source of truth — and its watch date is the latest such event. Unlike shows,
@@ -96,12 +97,20 @@ export interface MovieDetail {
   posterPath: string | null;
   releaseDate: string | null;
   runtime: number | null;
+  imdbRating: number | null; // IMDb community score (0–10) for the poster ★ chip; null when unresolved
+  director: string | null; // director(s), comma-joined; null when unresolved
+  cast: CastMember[]; // top-billed cast for the "Top cast" grid + "Stars" line; [] when unresolved
   tmdbId: number | null;
   tracked: boolean; // has a UserMediaState row — i.e. on your watchlist or already watched
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null; // latest watch date, or null if watched-but-undated / unwatched
+  inPlex: boolean; // present in the user's Plex library — the hero leads with Play (in Plex) vs Download (not)
   plexRatingKey: string | null; // set when in Plex → deep-link to watch it
+  videoResolution: string | null; // source resolution of the Plex copy ("4k"|"1080"|…); null when not in Plex
+  hdrFormat: string | null; // combined HDR label of the Plex copy ("Dolby Vision · HDR10"|…); null = SDR / not in Plex
+  audioTracks: AudioTrack[]; // audio-row languages of the Plex copy; [] when not in Plex / unknown
+  subtitleLangs: string[]; // subtitle-row languages of the Plex copy; [] when not in Plex / unknown
 }
 
 export async function getMovieDetail(userId: string, idOrSlug: string): Promise<MovieDetail | null> {
@@ -112,13 +121,13 @@ export async function getMovieDetail(userId: string, idOrSlug: string): Promise<
   if (!item) return null;
   const movieId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
-  const [state, seen, plexMovies] = await Promise.all([
+  const [state, seen, plexPresence] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: movieId } } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: movieId, episodeId: null },
       select: { watchedAt: true },
     }),
-    isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
+    isPlexConfigured() ? getMoviePlexPresence(userId, movieId) : Promise.resolve(null),
   ]);
 
   let watchedAt: Date | null = null;
@@ -133,11 +142,19 @@ export async function getMovieDetail(userId: string, idOrSlug: string): Promise<
     posterPath: item.posterPath,
     releaseDate: item.releaseDate,
     runtime: item.runtime,
+    imdbRating: item.imdbRating,
+    director: item.director,
+    cast: parseCast(item.cast),
     tmdbId: item.tmdbId,
     tracked: state != null,
     isFavorite: state?.isFavorite ?? false,
     watched: seen.length > 0,
     watchedAt,
-    plexRatingKey: plexMovies.get(movieId) ?? null,
+    inPlex: plexPresence != null,
+    plexRatingKey: plexPresence?.plexRatingKey ?? null,
+    videoResolution: plexPresence?.videoResolution ?? null,
+    hdrFormat: plexPresence?.hdrFormat ?? null,
+    audioTracks: plexPresence?.audioTracks ?? [],
+    subtitleLangs: plexPresence?.subtitleLangs ?? [],
   };
 }
