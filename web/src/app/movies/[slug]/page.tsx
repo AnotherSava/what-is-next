@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/app/_components/BackLink";
+import { TopCast } from "@/app/_components/TopCast";
 import { MovieHeroMenu } from "@/app/movies/_components/MovieHeroActions";
 import { MovieHeroPoster } from "@/app/movies/_components/MovieHeroPoster";
 import { displayMonthYear, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { downloadLinksFor } from "@/lib/downloadSources";
 import { formatRuntime } from "@/lib/format";
-import { posterUrl } from "@/lib/images";
 import { getMovieDetail } from "@/lib/movies";
 import { formatAudio, formatResolution, formatSubtitles, isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -41,7 +40,6 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
   const meta = [year, formatRuntime(movie.runtime)].filter(Boolean).join(" · ");
   const watchUrl = movie.inPlex ? plexWatchUrl(plexServerId, movie.plexRatingKey) : null;
   const stars = movie.cast.slice(0, 3).map((c) => c.name).join(" · ");
-  const topCast = movie.cast.slice(0, 8);
   const watchedStamp = movie.watched
     ? `WATCHED${movie.watchedAt ? ` · ${displayMonthYear(movie.watchedAt).toUpperCase()}` : ""}`
     : null;
@@ -113,35 +111,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
         </div>
       </div>
 
-      {topCast.length > 0 && (
-        <section className="mt-[34px]">
-          <h2 className="font-display mb-[18px] text-[18px] font-bold">Top cast</h2>
-          <div className="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-            {topCast.map((c, i) => {
-              const photo = posterUrl(c.profilePath, "w185");
-              return (
-                <div key={`${c.name}-${i}`} className="flex min-w-0 items-center gap-4">
-                  {photo ? (
-                    <Image src={photo} alt={c.name} width={72} height={72} className="h-[72px] w-[72px] shrink-0 rounded-full border object-cover" style={{ borderColor: "var(--color-border-elevated)" }} />
-                  ) : (
-                    <span
-                      className="font-display flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full border bg-[var(--color-surface-2)] text-[16px] font-semibold text-[var(--color-muted)]"
-                      style={{ borderColor: "var(--color-border-elevated)" }}
-                      aria-hidden
-                    >
-                      {initials(c.name)}
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-display text-[15.5px] leading-[1.25] font-semibold text-pretty">{c.name}</div>
-                    {c.character && <div className="font-narrow mt-[3px] truncate text-[14px] text-[var(--color-muted)]">{c.character}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+      <TopCast cast={movie.cast} limit={8} />
     </div>
   );
 }
@@ -158,13 +128,4 @@ function SpecRow({ label, value, more = 0, muted = false }: { label: string; val
       </span>
     </div>
   );
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
 }
