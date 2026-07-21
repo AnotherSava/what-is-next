@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { PosterPlay } from "@/app/_components/PosterPlay";
+import { TopCast } from "@/app/_components/TopCast";
 import { getPrisma } from "@/lib/db";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -34,6 +35,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
   const { progress } = show;
   const summary = groupSummary(show.group, progress);
   const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
+  const stars = show.cast.slice(0, 3).map((c) => c.name).join(" · ");
 
   return (
     <div className="space-y-6">
@@ -56,6 +58,22 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
               {show.status ? ` · ${show.status}` : ""}
             </span>
           </p>
+          {(show.creator || stars) && (
+            <div className="space-y-0.5 text-sm text-[var(--color-muted)]">
+              {show.creator && (
+                <p>
+                  <span className="text-[var(--color-faint)]">Creator </span>
+                  {show.creator}
+                </p>
+              )}
+              {stars && (
+                <p>
+                  <span className="text-[var(--color-faint)]">Stars </span>
+                  {stars}
+                </p>
+              )}
+            </div>
+          )}
           {canEdit && (
             <div className="flex items-center gap-3 pt-1">
               {show.group !== "finished" && (
@@ -81,6 +99,8 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
         canEdit={canEdit && manualWatched}
         nextUpSeasonNumber={progress.nextUp?.seasonNumber ?? null}
       />
+
+      <TopCast cast={show.cast} limit={8} />
     </div>
   );
 }

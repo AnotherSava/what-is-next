@@ -2,7 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { CastMember } from "@/lib/cast";
 import { getOmdb, isOmdbConfigured } from "@/lib/omdb";
 import { syncSlug } from "@/lib/slug";
-import type { TmdbClient, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
+import type { TmdbClient, TmdbCredits, TmdbMovieDetail, TmdbSeasonDetail, TmdbTvDetail } from "@/lib/tmdb";
 
 // Which external API a catalog row is hydrated from. Drives where external ids are written (tmdbId vs tvdbId)
 // and which client the refresh dispatches to. See MediaItem.metadataSource.
@@ -42,6 +42,8 @@ export function tvDetailToMediaData(detail: TmdbTvDetail) {
     backdropPath: detail.backdrop_path ?? null,
     genres: detail.genres?.length ? JSON.stringify(detail.genres.map((g) => g.name)) : null,
     tmdbRating: detail.vote_average ?? null,
+    creator: creatorFrom(detail),
+    cast: castFromCredits(detail.credits),
     numberOfSeasons: detail.number_of_seasons ?? null,
     numberOfEpisodes: detail.number_of_episodes ?? null,
   };
@@ -63,22 +65,22 @@ export function movieDetailToMediaData(detail: TmdbMovieDetail) {
     genres: detail.genres?.length ? JSON.stringify(detail.genres.map((g) => g.name)) : null,
     tmdbRating: detail.vote_average ?? null,
     director: directorFrom(detail),
-    cast: castFrom(detail),
+    cast: castFromCredits(detail.credits),
   };
 }
 
 // Store the top-billed dozen; the detail page renders the first several of these. Cheap to keep a few extra.
 const MAX_CAST = 12;
 
-// The movie's top-billed cast from TMDB credits as a JSON string ([{name,character,profilePath}] in billing
-// order), or null when credits weren't returned or list no cast. Sorted by TMDB's `order` (0 = top-billed) so
-// the stored order is stable regardless of how the API happened to return the array, then de-duplicated by name —
-// TMDB's community-edited credits can list the same actor twice (a dual role, or a duplicate row), which would
-// otherwise show the same face/name twice in the grid and Stars line (same de-dup as directorFrom). The first
-// (highest-billed) entry wins. See lib/cast.ts (parseCast).
-function castFrom(detail: TmdbMovieDetail): string | null {
+// Top-billed cast from a TMDB credits block (movie or TV — both expose the same [{name,character,profile_path,order}]
+// shape) as a JSON string in billing order, or null when credits weren't returned or list no cast. Sorted by TMDB's
+// `order` (0 = top-billed) so the stored order is stable regardless of how the API happened to return the array,
+// then de-duplicated by name — TMDB's community-edited credits can list the same actor twice (a dual role, or a
+// duplicate row), which would otherwise show the same face/name twice in the grid and Stars line (same de-dup as
+// creatorFrom/directorFrom). The first (highest-billed) entry wins. See lib/cast.ts (parseCast).
+function castFromCredits(credits: TmdbCredits | null | undefined): string | null {
   const seen = new Set<string>();
-  const members: CastMember[] = (detail.credits?.cast ?? [])
+  const members: CastMember[] = (credits?.cast ?? [])
     .slice()
     .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
     .map((c) => ({ name: (c.name ?? "").trim(), character: c.character?.trim() || null, profilePath: c.profile_path ?? null }))
@@ -99,6 +101,14 @@ function directorFrom(detail: TmdbMovieDetail): string | null {
     .map((c) => c.name)
     .filter((n): n is string => !!n);
   const unique = [...new Set(names)]; // TMDB's community-edited crew can list the same person twice — de-dup
+  return unique.length ? unique.join(", ") : null;
+}
+
+// The show's creator(s) from TMDB `created_by`, comma-joined (a series can be co-created), or null when none is
+// listed. De-duped like directorFrom — TMDB's community-edited data can repeat a name.
+function creatorFrom(detail: TmdbTvDetail): string | null {
+  const names = (detail.created_by ?? []).map((c) => c.name).filter((n): n is string => !!n);
+  const unique = [...new Set(names)];
   return unique.length ? unique.join(", ") : null;
 }
 

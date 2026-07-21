@@ -71,7 +71,7 @@ export class TmdbClient {
     return this.request(`/find/${encodeURIComponent(imdbId)}`, { external_source: "imdb_id" }, tmdbFindSchema);
   }
   getTvDetail(id: number): Promise<TmdbTvDetail> {
-    return this.request(`/tv/${id}`, { append_to_response: "external_ids" }, tmdbTvDetailSchema);
+    return this.request(`/tv/${id}`, { append_to_response: "external_ids,credits" }, tmdbTvDetailSchema);
   }
   getSeasonDetail(id: number, seasonNumber: number): Promise<TmdbSeasonDetail> {
     return this.request(`/tv/${id}/season/${seasonNumber}`, {}, tmdbSeasonDetailSchema);

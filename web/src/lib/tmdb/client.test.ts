@@ -33,7 +33,7 @@ describe("TmdbClient", () => {
     expect(calls[0]).toBe("https://api.themoviedb.org/3/find/327417?external_source=tvdb_id");
   });
 
-  it("appends external_ids on tv detail and parses it", async () => {
+  it("appends external_ids and credits on tv detail and parses it", async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       calls.push(String(input));
@@ -41,7 +41,7 @@ describe("TmdbClient", () => {
     });
     const client = makeClient(fetchImpl as unknown as typeof fetch);
     const detail = await client.getTvDetail(71446);
-    expect(calls[0]).toBe("https://api.themoviedb.org/3/tv/71446?append_to_response=external_ids");
+    expect(calls[0]).toBe("https://api.themoviedb.org/3/tv/71446?append_to_response=external_ids%2Ccredits");
     expect(detail.status).toBe("Ended");
     expect(detail.external_ids?.tvdb_id).toBe(327417);
   });

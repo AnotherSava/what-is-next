@@ -1,3 +1,4 @@
+import { type CastMember, parseCast } from "@/lib/cast";
 import { displayDate, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured } from "@/lib/plex";
@@ -185,6 +186,8 @@ export interface ShowDetail {
   backdropPath: string | null;
   tmdbId: number | null;
   releaseDate: string | null;
+  creator: string | null; // show creator(s), comma-joined; null when unresolved
+  cast: CastMember[]; // top-billed cast for the "Top cast" grid + "Stars" line; [] when unresolved
   wantToWatch: boolean;
   isFavorite: boolean;
   progress: ShowProgress;
@@ -289,6 +292,8 @@ export async function getShowDetail(
     backdropPath: item.backdropPath,
     tmdbId: item.tmdbId,
     releaseDate: item.releaseDate,
+    creator: item.creator,
+    cast: parseCast(item.cast),
     wantToWatch: state?.wantToWatch ?? false,
     isFavorite: state?.isFavorite ?? false,
     progress,

@@ -49,8 +49,9 @@ model MediaItem {
   tmdbRating    Float?
   imdbRating    Float? // IMDb community score (0–10), fetched from OMDb by imdbId. Null when unresolved/unfetched.
   director      String? // movie director(s) from TMDB credits, comma-joined; null for TV / unresolved / unfetched.
-  cast          String? // top-billed movie cast from TMDB credits as JSON [{name,character,profilePath}] in billing
-  //                       order; null for TV / unresolved / unfetched. Parsed via lib/cast.ts (parseCast).
+  creator       String? // TV show creator(s) from TMDB (created_by), comma-joined; null for movies / unresolved / unfetched.
+  cast          String? // top-billed cast (movie or TV) from TMDB credits as JSON [{name,character,profilePath}] in
+  //                       billing order; null when unresolved / unfetched. Parsed via lib/cast.ts (parseCast).
 
   numberOfSeasons  Int? // denormalized for list views; recomputed on refresh
   numberOfEpisodes Int?

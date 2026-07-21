@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// Top-billed movie cast, persisted as a JSON string on MediaItem.cast and rendered on the movie detail page.
-// Captured from TMDB credits during hydration (see catalog.ts castFrom); TV rows leave it null.
+// Top-billed cast (movie or TV), persisted as a JSON string on MediaItem.cast and rendered on the movie and show
+// detail pages. Captured from TMDB credits during hydration (see catalog.ts castFromCredits).
 
 export interface CastMember {
   name: string;

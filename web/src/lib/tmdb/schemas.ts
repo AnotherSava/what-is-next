@@ -63,6 +63,7 @@ const tmdbCreditsSchema = z.object({
     .nullish(),
   crew: z.array(z.object({ job: z.string().nullish(), name: z.string().nullish() })).nullish(),
 });
+export type TmdbCredits = z.infer<typeof tmdbCreditsSchema>;
 
 // A season stub inside a show detail response (no episodes here — those come from /tv/{id}/season/{n}).
 const tmdbSeasonStubSchema = z.object({
@@ -75,7 +76,7 @@ const tmdbSeasonStubSchema = z.object({
   episode_count: z.number().int().nullish(),
 });
 
-// GET /3/tv/{id}?append_to_response=external_ids
+// GET /3/tv/{id}?append_to_response=external_ids,credits
 export const tmdbTvDetailSchema = z.object({
   id: z.number().int(),
   name: z.string(),
@@ -92,6 +93,8 @@ export const tmdbTvDetailSchema = z.object({
   genres: z.array(tmdbGenreSchema).nullish(),
   seasons: z.array(tmdbSeasonStubSchema).nullish(),
   external_ids: tmdbExternalIdsSchema.nullish(),
+  created_by: z.array(z.object({ name: z.string().nullish() })).nullish(), // the show's creator(s)
+  credits: tmdbCreditsSchema.nullish(), // series-regular cast (billing order), like the movie credits
 });
 export type TmdbTvDetail = z.infer<typeof tmdbTvDetailSchema>;
 
