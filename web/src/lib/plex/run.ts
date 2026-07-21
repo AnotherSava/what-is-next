@@ -29,7 +29,8 @@ export async function syncPlexPresence(
   const deps = plexDeps(userId);
   const priorWatchCursor = (await getSetting("plex:watchCursor"))?.shows ?? {};
   const priorPresenceCursor = (await getSetting("plex:presenceCursor"))?.shows ?? {};
-  const r = await scanPlex(deps, priorWatchCursor, priorPresenceCursor);
+  const priorSourceCursor = (await getSetting("plex:sourceCursor"))?.shows ?? {};
+  const r = await scanPlex(deps, priorWatchCursor, priorPresenceCursor, priorSourceCursor);
   const presenceChanged = await applyPresence(deps.prisma, userId, r.presenceRows);
   await applyEpisodePresence(deps.prisma, userId, r.episodePresence, r.matchedShowIds);
   const importedWatches = await applyWatched(deps.prisma, userId, r.watchedSignals);
@@ -56,6 +57,7 @@ export async function syncPlexPresence(
   await setSetting("plex:unaccounted", { at, items: r.unaccounted });
   await setSetting("plex:watchCursor", { at, shows: r.watchCursor });
   await setSetting("plex:presenceCursor", { at, shows: r.presenceCursor });
+  await setSetting("plex:sourceCursor", { at, shows: r.sourceCursor });
   return { ...r, importedWatches, durationMs, presenceChanged };
 }
 

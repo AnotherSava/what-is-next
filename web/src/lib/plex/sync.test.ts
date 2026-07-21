@@ -78,14 +78,18 @@ function fakePlex(): PlexClient {
       return [{ ratingKey: "s2c1", index: 1, leafCount: 2, viewedLeafCount: 1 }];
     },
     async getShowEpisodes() {
+      // /allLeaves is lightweight — Media carries resolution but no Stream detail (HDR/audio/subs need the per-
+      // episode metadata fetch below). Episodes carry ratingKeys so the sync can fetch a representative one's source.
+      const Media = [{ videoResolution: "1080", height: 1080, Part: [{}] }];
       return [
-        { parentIndex: 1, index: 1, viewCount: 1, lastViewedAt: 1_710_000_000 },
-        { parentIndex: 1, index: 2, viewCount: 0 },
+        { ratingKey: "s1e1", parentIndex: 1, index: 1, viewCount: 1, lastViewedAt: 1_710_000_000, Media },
+        { ratingKey: "s1e2", parentIndex: 1, index: 2, viewCount: 0, Media },
       ];
     },
     async getItemMedia(ratingKey: string) {
-      // The matched movie (m1) is a 1080p SDR copy with one English audio + subtitle track; else no media.
-      if (ratingKey === "m1")
+      // Full detail (streams). The matched movie (m1) and the representative episode (s1e1) are a 1080p SDR copy
+      // with one English audio + subtitle track; anything else has no media.
+      if (ratingKey === "m1" || ratingKey === "s1e1")
         return [
           {
             videoResolution: "1080",
@@ -160,12 +164,24 @@ describe("scanPlex", () => {
     expect(r.presenceSeasons).toBe(1); // Tracked Show season 1
     expect(r.presenceRows).toEqual(
       expect.arrayContaining([
-        { mediaItemId: "mi-show", seasonNumber: 1, plexRatingKey: "s1" },
+        // The matched show's season carries its Plex source too, sampled from a representative episode (first sync
+        // seeds it because sourceCursor is empty).
+        {
+          mediaItemId: "mi-show",
+          seasonNumber: 1,
+          plexRatingKey: "s1",
+          sourceDerived: true,
+          videoResolution: "1080",
+          hdrFormat: null,
+          audioTracks: '[{"lang":"English","atmos":false}]',
+          subtitleLangs: '["English"]',
+        },
         // The matched movie also carries its Plex source (resolution/HDR/audio/subtitles) captured via getItemMedia.
         {
           mediaItemId: "mi-movie",
           seasonNumber: null,
           plexRatingKey: "m1",
+          sourceDerived: true,
           videoResolution: "1080",
           hdrFormat: null,
           audioTracks: '[{"lang":"English","atmos":false}]',
@@ -247,6 +263,63 @@ describe("applyPresence", () => {
   });
 });
 
+describe("per-season Plex source", () => {
+  it("captures each season's source on scan and persists it across a steady-state resync", async () => {
+    // First scan seeds source (sourceCursor empty → sourceMissing forces the /allLeaves fetch).
+    const r = await scanPlex(deps());
+    const season = r.presenceRows.find((x) => x.mediaItemId === "mi-show" && x.seasonNumber === 1);
+    expect(season).toMatchObject({
+      sourceDerived: true,
+      videoResolution: "1080",
+      hdrFormat: null,
+      audioTracks: '[{"lang":"English","atmos":false}]',
+      subtitleLangs: '["English"]',
+    });
+    expect(r.sourceCursor.s1).toBe(1); // one season sourced
+    await applyPresence(prisma, "owner", r.presenceRows);
+    let row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
+    expect(row?.videoResolution).toBe("1080");
+
+    // Steady-state resync: all cursors match, so /allLeaves is NOT fetched and no fresh source is derived — the
+    // season row comes back bare, and applyPresence must carry the stored source forward, not null it out.
+    const r2 = await scanPlex(deps(), { s1: 2 }, { s1: 3 }, { s1: 1 });
+    const bare = r2.presenceRows.find((x) => x.mediaItemId === "mi-show" && x.seasonNumber === 1);
+    expect(bare?.sourceDerived).toBeUndefined();
+    expect(bare?.videoResolution).toBeUndefined();
+    const changed = await applyPresence(prisma, "owner", r2.presenceRows);
+    expect(changed).toBe(false); // effective snapshot identical after inheriting source → no spurious page refresh
+    row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
+    expect(row?.videoResolution).toBe("1080"); // preserved across the snapshot rebuild
+  });
+
+  it("preserves a season's stored source when its episode-detail fetch fails during a re-derive", async () => {
+    // First sync fully captures season 1 (English audio + subtitles).
+    const r1 = await scanPlex(deps());
+    await applyPresence(prisma, "owner", r1.presenceRows);
+    let row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
+    expect(row?.audioTracks).toBe('[{"lang":"English","atmos":false}]');
+
+    // Second sync: the show's episode count moved (presenceCursor 2 → now 3) so the whole show re-derives, but the
+    // representative episode's detail fetch now fails. The season must NOT be marked derived, so applyPresence keeps
+    // the stored full source instead of overwriting it with a resolution-only (or null) degraded capture.
+    const plex = fakePlex();
+    const movieMedia = await plex.getItemMedia("m1"); // preserve the movie branch (its fetch isn't try/caught)
+    (plex as unknown as { getItemMedia: (rk: string) => Promise<unknown> }).getItemMedia = async (rk: string) => {
+      if (rk === "m1") return movieMedia;
+      throw new Error("episode detail unavailable");
+    };
+    const r2 = await scanPlex({ prisma, plex, tmdb: fakeTmdb(), userId: "owner" }, { s1: 2 }, { s1: 2 }, { s1: 1 });
+    const season = r2.presenceRows.find((x) => x.mediaItemId === "mi-show" && x.seasonNumber === 1);
+    expect(season?.sourceDerived).toBeUndefined(); // degraded fetch → not marked derived → will inherit
+    expect(r2.sourceCursor.s1).toBe(1); // still-seeded show keeps its marker (no perpetual re-seed)
+
+    await applyPresence(prisma, "owner", r2.presenceRows);
+    row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
+    expect(row?.audioTracks).toBe('[{"lang":"English","atmos":false}]'); // preserved, NOT nulled by the failed fetch
+    expect(row?.videoResolution).toBe("1080");
+  });
+});
+
 describe("continuous watched-sync (matched items)", () => {
   // Seed episodes for the already-tracked show so a watched episode can resolve to the catalog.
   async function seedShowEpisodes() {
@@ -288,16 +361,17 @@ describe("continuous watched-sync (matched items)", () => {
 
   it("skips a show's episode fetch when neither its watched nor its total episode count changed", async () => {
     await seedShowEpisodes();
-    // Both cursors match what the fake still reports for the tracked show (ratingKey "s1"): viewedLeafCount 2 and
-    // leafCount 3. So /allLeaves is skipped entirely — no watch signals, no presence refresh; the movie is not
-    // cursor-gated and still yields a signal.
-    const r = await scanPlex(deps(), { s1: 2 }, { s1: 3 });
+    // All three cursors match what the fake reports for the tracked show (ratingKey "s1"): viewedLeafCount 2,
+    // leafCount 3, source already captured. So /allLeaves is skipped entirely — no watch signals, no presence
+    // refresh, no source re-derive; the movie is not cursor-gated and still yields a signal.
+    const r = await scanPlex(deps(), { s1: 2 }, { s1: 3 }, { s1: 1 });
     expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-show")).toBe(false);
     expect(r.episodePresence["mi-show"]).toBeUndefined();
     expect(r.watchedSignals.some((s) => s.mediaItemId === "mi-movie")).toBe(true);
-    // Both cursors are refreshed with the current totals for the next run.
+    // All three cursors are carried forward for the next run.
     expect(r.watchCursor.s1).toBe(2);
     expect(r.presenceCursor.s1).toBe(3);
+    expect(r.sourceCursor.s1).toBe(1);
   });
 
   it("re-fetches a show for presence when its episode count changed even if its watched count did not", async () => {

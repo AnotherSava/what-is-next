@@ -114,6 +114,15 @@ const plexPresenceCursorSchema = z.object({
   shows: z.record(z.string(), z.number().int()),
 });
 
+// Per-show source-captured marker (Plex integration): plexRatingKey → number of seasons whose Plex source
+// (resolution/HDR/audio/subtitles) was derived at the last sync. A key being present means source has been
+// captured at least once; the next sync then re-derives it only when the show's episode count moves — a season's
+// format is static, so this keeps source capture off the steady-state path (see scanPlex).
+const plexSourceCursorSchema = z.object({
+  at: z.string(),
+  shows: z.record(z.string(), z.number().int()),
+});
+
 // The Plex server's stable machineIdentifier (Plex integration), captured each sync. Combined with a per-item
 // plexRatingKey it builds an app.plex.tv deep link to watch the item. See src/lib/plex/link.ts.
 const plexServerSchema = z.object({ at: z.string(), machineIdentifier: z.string() });
@@ -126,6 +135,7 @@ const SETTING_SCHEMAS = {
   "plex:unaccounted": plexUnaccountedSchema,
   "plex:watchCursor": plexWatchCursorSchema,
   "plex:presenceCursor": plexPresenceCursorSchema,
+  "plex:sourceCursor": plexSourceCursorSchema,
   "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
   "settings:downloadSources": downloadSourcesSchema,

@@ -4,7 +4,7 @@ import type { PlexCandidate } from "@/lib/settings";
 import type { TmdbClient } from "@/lib/tmdb";
 import type { PlexClient } from "./client";
 import { parseGuids, type PlexEpisode } from "./schemas";
-import { deriveVideoSource } from "./source";
+import { deriveVideoSource, type VideoSource } from "./source";
 
 // Plex sync core (Plex integration). Read-only against Plex; writes PlexPresence (full snapshot) + SeenEvent rows
 // (source "plex") for watch state, plus — on explicit add — new UserMediaState rows. Explicit userId (brief §5a
@@ -25,10 +25,13 @@ export interface PresenceRow {
   mediaItemId: string;
   seasonNumber: number | null;
   plexRatingKey: string; // the show/movie's Plex ratingKey — lets the UI deep-link into Plex to watch it
-  videoResolution?: string | null; // movies only: source resolution ("4k"|"1080"|…) from Plex; absent for shows
-  hdrFormat?: string | null; // movies only: combined HDR label ("Dolby Vision · HDR10"|…); null/absent = SDR
-  audioTracks?: string | null; // movies only: audio languages as JSON [{lang,atmos}]; absent for shows
-  subtitleLangs?: string | null; // movies only: subtitle languages as JSON string[]; absent for shows
+  // Plex source of this row's copy — a movie (seasonNumber null) or one TV season. Set only when derived this sync
+  // (sourceDerived); when omitted, applyPresence carries the previously-stored source for this row forward.
+  videoResolution?: string | null; // source resolution ("4k"|"1080"|…) from Plex
+  hdrFormat?: string | null; // combined HDR label ("Dolby Vision · HDR10"|…); null = SDR
+  audioTracks?: string | null; // audio languages as JSON [{lang,atmos}]
+  subtitleLangs?: string | null; // subtitle languages as JSON string[]
+  sourceDerived?: boolean; // true = the four source fields were derived this sync (else inherit the stored ones)
 }
 
 // A watched item observed in Plex, to be reconciled into the SeenEvent log. seasonNumber/episodeNumber null = a
@@ -71,6 +74,9 @@ export interface ScanResult {
   // Per-show cursor: plexRatingKey → total episode count (leafCount) observed this scan. Same purpose as the watch
   // cursor, for the per-episode presence snapshot: an unchanged episode count means presence didn't move.
   presenceCursor: Record<string, number>;
+  // Per-show cursor: plexRatingKey → number of seasons whose Plex source was derived this scan. Persisted and fed
+  // back so an already-sourced show skips re-deriving its per-season source unless its episode count moves.
+  sourceCursor: Record<string, number>;
   // Every matched TV show's mediaItemId this scan, whether or not its /allLeaves was fetched — lets
   // applyEpisodePresence drop presence rows for shows that fell out of the library.
   matchedShowIds: string[];
@@ -120,6 +126,7 @@ export async function scanPlex(
   deps: PlexSyncDeps,
   watchCursor: Record<string, number> = {},
   presenceCursor: Record<string, number> = {},
+  sourceCursor: Record<string, number> = {},
 ): Promise<ScanResult> {
   const { prisma, plex } = deps;
   const idx = await catalogIndex(prisma);
@@ -129,6 +136,7 @@ export async function scanPlex(
   const watchedSignals: WatchedSignal[] = [];
   const nextWatchCursor: Record<string, number> = {};
   const nextPresenceCursor: Record<string, number> = {};
+  const nextSourceCursor: Record<string, number> = {};
   const matchedShowIds: string[] = [];
   const episodePresence: Record<string, EpisodePresenceSignal[]> = {};
   const candidates: PlexCandidate[] = [];
@@ -158,28 +166,63 @@ export async function scanPlex(
         if (match) {
           matchedShows++;
           matchedShowIds.push(match);
-          if (present.length > 0) {
-            for (const n of present) {
-              presenceRows.push({ mediaItemId: match, seasonNumber: n, plexRatingKey: item.ratingKey });
-              presenceSeasons++;
-            }
-          } else {
-            presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey }); // present, seasons unknown
-          }
-          // Continuous watched-sync + per-episode presence for this already-tracked show. Fetch /allLeaves once
-          // when EITHER the show's watched-episode count OR its total episode count changed since the last sync —
-          // that single fetch feeds both the watch import and the presence snapshot, so a steady-state sync (both
-          // counts unchanged) does zero episode fetches. Both counts are free (getShowSeasons is fetched anyway).
-          // Trade-off: a change that nets the same totals (an unwatch+watch, or swapping one file for another) is
-          // missed until the next real move — rare, and presence/watch state are only additively corrected.
+          // Continuous watched-sync + per-episode presence + per-season source for this already-tracked show. Fetch
+          // /allLeaves once when the show's watched-episode count OR its total episode count changed since the last
+          // sync, OR its per-season source hasn't been captured yet — that fetch feeds the watch import, the presence
+          // snapshot AND the season-source derivation, so a steady-state sync (counts unchanged, source already
+          // captured) does zero fetches. When it does run, season source additionally fetches one representative
+          // episode's full detail per season (streams → HDR/audio/subs, which /allLeaves omits). All three cursors
+          // are cheap: the two counts come free from getShowSeasons, and source is static so it's captured once then
+          // only re-derived when episodes move. Trade-off: a change that nets the same totals (an unwatch+watch, or
+          // an in-place quality swap that keeps the episode count) is missed until the next real move — rare, and
+          // presence/watch/source are only additively corrected.
           nextWatchCursor[item.ratingKey] = watchedLeaves;
           nextPresenceCursor[item.ratingKey] = totalLeaves;
           const watchChanged = watchedLeaves > 0 && watchedLeaves !== watchCursor[item.ratingKey];
           const presenceChanged = totalLeaves !== presenceCursor[item.ratingKey];
-          if (watchChanged || presenceChanged) {
+          const sourceMissing = present.length > 0 && !(item.ratingKey in sourceCursor);
+          let seasonSource: Map<number, SeasonSource> | null = null;
+          if (watchChanged || presenceChanged || sourceMissing) {
             const episodes = await plex.getShowEpisodes(item.ratingKey);
             watchedSignals.push(...watchedSignalsFromEpisodes(episodes, match));
             episodePresence[match] = episodePresenceFromEpisodes(episodes);
+            seasonSource = await seasonSourceFromEpisodes(plex, episodes);
+          }
+          // Carry the source cursor forward. Mark the show fully sourced only when EVERY season's full detail was
+          // captured this sync — a degraded season (its episode-detail fetch failed) leaves the show un-seeded so the
+          // next sync retries it. An already-seeded show keeps its marker (its degraded season inherits the stored
+          // source, so no re-seed is needed); a still-matched-but-unfetched show keeps its prior marker too.
+          if (seasonSource) {
+            const complete = [...seasonSource.values()].every((s) => s.full);
+            if (complete || item.ratingKey in sourceCursor) nextSourceCursor[item.ratingKey] = present.length;
+          } else if (item.ratingKey in sourceCursor) {
+            nextSourceCursor[item.ratingKey] = sourceCursor[item.ratingKey];
+          }
+          if (present.length > 0) {
+            for (const n of present) {
+              const entry = seasonSource?.get(n);
+              const src = entry?.source;
+              presenceRows.push({
+                mediaItemId: match,
+                seasonNumber: n,
+                plexRatingKey: item.ratingKey,
+                // Only when this season's FULL detail was captured this sync; otherwise omit so applyPresence
+                // inherits the stored source — a degraded or absent fetch must never overwrite good data with a
+                // resolution-only capture or nulls.
+                ...(entry?.full
+                  ? {
+                      sourceDerived: true,
+                      videoResolution: src?.videoResolution ?? null,
+                      hdrFormat: src?.hdrFormat ?? null,
+                      audioTracks: src && src.audioTracks.length ? JSON.stringify(src.audioTracks) : null,
+                      subtitleLangs: src && src.subtitleLangs.length ? JSON.stringify(src.subtitleLangs) : null,
+                    }
+                  : {}),
+              });
+              presenceSeasons++;
+            }
+          } else {
+            presenceRows.push({ mediaItemId: match, seasonNumber: null, plexRatingKey: item.ratingKey }); // present, seasons unknown
           }
         } else if (hasExternalId) {
           candidates.push({
@@ -211,6 +254,7 @@ export async function scanPlex(
             mediaItemId: match,
             seasonNumber: null,
             plexRatingKey: item.ratingKey,
+            sourceDerived: true, // movies always re-derive source each sync, so they never inherit
             videoResolution: source.videoResolution,
             hdrFormat: source.hdrFormat,
             audioTracks: source.audioTracks.length ? JSON.stringify(source.audioTracks) : null,
@@ -257,6 +301,7 @@ export async function scanPlex(
     candidates,
     watchCursor: nextWatchCursor,
     presenceCursor: nextPresenceCursor,
+    sourceCursor: nextSourceCursor,
     matchedShowIds,
     episodePresence,
     unaccounted,
@@ -283,6 +328,50 @@ function episodePresenceFromEpisodes(episodes: PlexEpisode[]): EpisodePresenceSi
   const out: EpisodePresenceSignal[] = [];
   for (const e of episodes) {
     if (e.parentIndex != null && e.index != null) out.push({ seasonNumber: e.parentIndex, episodeNumber: e.index });
+  }
+  return out;
+}
+
+// A season's derived source, plus whether it's the FULL detail (the per-episode getItemMedia succeeded) or a
+// degraded fallback. Only a full capture is ever stored or counted as seeded; a degraded one (the episode-detail
+// fetch failed or returned nothing) is left to inherit the previously-stored source and retry next sync — so a
+// transient Plex hiccup never overwrites good HDR/audio/subtitle data nor seals in a resolution-only capture.
+interface SeasonSource {
+  source: VideoSource;
+  full: boolean;
+}
+
+// Derive each season's Plex source (resolution/HDR/audio/subtitles) from a show's fetched episodes. A season's
+// episodes almost always share one copy, so a representative episode stands for the season: the lowest-numbered one
+// with a file. /allLeaves' Media is lightweight (resolution but no streams), so full source comes from one extra
+// per-episode metadata fetch (getItemMedia) — one call per season, only on the already-gated seed/change path.
+async function seasonSourceFromEpisodes(plex: PlexClient, episodes: PlexEpisode[]): Promise<Map<number, SeasonSource>> {
+  const bySeason = new Map<number, PlexEpisode[]>();
+  for (const e of episodes) {
+    if (e.parentIndex == null) continue;
+    const arr = bySeason.get(e.parentIndex);
+    if (arr) arr.push(e);
+    else bySeason.set(e.parentIndex, [e]);
+  }
+  const out = new Map<number, SeasonSource>();
+  for (const [season, eps] of bySeason) {
+    const rep = [...eps]
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER))
+      .find((e) => e.ratingKey || (e.Media?.length ?? 0) > 0);
+    let media = rep?.Media ?? null; // lightweight /allLeaves Media (resolution only) — fallback
+    let full = false;
+    if (rep?.ratingKey) {
+      try {
+        const detail = await plex.getItemMedia(rep.ratingKey);
+        if (detail.length) {
+          media = detail; // full detail carries the streams /allLeaves omits (HDR/audio/subtitles)
+          full = true;
+        }
+      } catch {
+        // keep the lightweight fallback; full stays false so this season inherits/retries, never overwrites
+      }
+    }
+    out.set(season, { source: deriveVideoSource(media), full });
   }
   return out;
 }
@@ -380,8 +469,26 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
       subtitleLangs: true,
     },
   });
-  // Include the source fields so a quality change (e.g. a 1080p file swapped for 4K, or a new audio track) also
-  // counts as a delta and refreshes an open page, not just presence appearing/disappearing.
+  const key = (mediaItemId: string, seasonNumber: number | null) => `${mediaItemId}|${seasonNumber}`;
+  // Source captured on a prior sync, keyed by row. A row whose source wasn't re-derived this sync (a TV season
+  // whose episodes didn't move — see scanPlex) inherits it, so the full-snapshot rebuild never nulls out a
+  // season's stored source. Movies always set sourceDerived, so they never inherit.
+  const priorSource = new Map(existing.map((r) => [key(r.mediaItemId, r.seasonNumber), r]));
+  const resolved = rows.map((r) => {
+    const prior = r.sourceDerived ? undefined : priorSource.get(key(r.mediaItemId, r.seasonNumber));
+    return {
+      mediaItemId: r.mediaItemId,
+      seasonNumber: r.seasonNumber,
+      plexRatingKey: r.plexRatingKey,
+      videoResolution: (r.sourceDerived ? r.videoResolution : prior?.videoResolution) ?? null,
+      hdrFormat: (r.sourceDerived ? r.hdrFormat : prior?.hdrFormat) ?? null,
+      audioTracks: (r.sourceDerived ? r.audioTracks : prior?.audioTracks) ?? null,
+      subtitleLangs: (r.sourceDerived ? r.subtitleLangs : prior?.subtitleLangs) ?? null,
+    };
+  });
+
+  // Include the (effective, post-inherit) source fields so a quality change (e.g. a 1080p file swapped for 4K, or a
+  // new audio track) also counts as a delta and refreshes an open page, not just presence appearing/disappearing.
   const sig = (r: {
     mediaItemId: string;
     seasonNumber: number | null;
@@ -393,23 +500,12 @@ export async function applyPresence(prisma: PrismaClient, userId: string, rows: 
   }) =>
     `${r.mediaItemId}|${r.seasonNumber}|${r.plexRatingKey}|${r.videoResolution ?? ""}|${r.hdrFormat ?? ""}|${r.audioTracks ?? ""}|${r.subtitleLangs ?? ""}`;
   const before = new Set(existing.map(sig));
-  const after = new Set(rows.map(sig));
+  const after = new Set(resolved.map(sig));
   const changed = before.size !== after.size || [...after].some((s) => !before.has(s));
 
   await prisma.plexPresence.deleteMany({ where: { userId } });
-  if (rows.length > 0) {
-    await prisma.plexPresence.createMany({
-      data: rows.map((r) => ({
-        userId,
-        mediaItemId: r.mediaItemId,
-        seasonNumber: r.seasonNumber,
-        plexRatingKey: r.plexRatingKey,
-        videoResolution: r.videoResolution ?? null,
-        hdrFormat: r.hdrFormat ?? null,
-        audioTracks: r.audioTracks ?? null,
-        subtitleLangs: r.subtitleLangs ?? null,
-      })),
-    });
+  if (resolved.length > 0) {
+    await prisma.plexPresence.createMany({ data: resolved.map((r) => ({ userId, ...r })) });
   }
   return changed;
 }

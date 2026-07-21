@@ -74,11 +74,16 @@ export const plexSeasonsResponseSchema = z.object({
 });
 
 // GET /library/metadata/{ratingKey}/allLeaves → all episodes of a show. parentIndex = season, index = episode.
+// ratingKey identifies the episode so the sync can fetch its full detail (getItemMedia) for that season's Plex
+// source — /allLeaves' own Media is lightweight (resolution/height but no Stream detail, so no HDR/audio/subs), so
+// it's only a fallback. The sync samples one episode per season, since episodes of a season share a copy.
 export const plexEpisodeSchema = z.object({
+  ratingKey: z.string().nullish(),
   parentIndex: z.number().int().nullish(),
   index: z.number().int().nullish(),
   viewCount: z.number().int().nullish(),
   lastViewedAt: z.number().int().nullish(),
+  Media: z.array(plexMediaSchema).nullish(),
 });
 export type PlexEpisode = z.infer<typeof plexEpisodeSchema>;
 export const plexEpisodesResponseSchema = z.object({
