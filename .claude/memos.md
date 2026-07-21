@@ -9,3 +9,4 @@ Off-task ideas captured during sessions, to revisit later. Managed by `/memo`; o
 - [x] 2026-07-11 05:07 — replace on my list button with X icon that asks if user wants to stop tracking item
 - [x] 2026-07-11 05:07 — show date when episode was watched when showing list of episodes
 - [x] 2026-07-17 17:36 — show play icon only on poster hover over not title
+- [ ] 2026-07-19 19:57 — add new shows and movies
