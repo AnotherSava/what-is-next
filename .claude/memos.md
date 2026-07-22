@@ -10,3 +10,4 @@ Off-task ideas captured during sessions, to revisit later. Managed by `/memo`; o
 - [x] 2026-07-11 05:07 — show date when episode was watched when showing list of episodes
 - [x] 2026-07-17 17:36 — show play icon only on poster hover over not title
 - [ ] 2026-07-19 19:57 — add new shows and movies
+- [ ] 2026-07-21 23:09 — Original-audio / English-subtitle warning cases to revisit — Audio (4): Female Stand-up S6/S7 → "No Russian audio"; Better Things S5 → "No English audio"; Mr. Nobody Against Putin → "No Danish audio". Subtitles (3): Intermission, The Salt of the Earth, Дыши S1 → "No English subtitles".
