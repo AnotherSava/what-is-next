@@ -34,6 +34,7 @@ export function tvDetailToMediaData(detail: TmdbTvDetail) {
     imdbId: detail.external_ids?.imdb_id ?? null,
     title: detail.name,
     originalTitle: detail.original_name ?? null,
+    originalLanguage: detail.original_language ?? null, // TMDB code, mostly ISO 639-1; resolve to a name via lib/tmdb/languages.ts
     overview: detail.overview ?? null,
     releaseDate: detail.first_air_date ?? null,
     status: detail.status ?? null,
@@ -56,6 +57,7 @@ export function movieDetailToMediaData(detail: TmdbMovieDetail) {
     imdbId: detail.external_ids?.imdb_id ?? null,
     title: detail.title,
     originalTitle: detail.original_title ?? null,
+    originalLanguage: detail.original_language ?? null, // TMDB code, mostly ISO 639-1; resolve to a name via lib/tmdb/languages.ts
     overview: detail.overview ?? null,
     releaseDate: detail.release_date ?? null,
     status: detail.status ?? null,

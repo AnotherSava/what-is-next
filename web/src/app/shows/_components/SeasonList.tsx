@@ -12,7 +12,7 @@ import {
 } from "../actions";
 
 // The show detail page's left column (design: "Shows Page - Seasons"): an accordion of seasons, each expanding to
-// its episode list. Seasons in Plex show a source pill (quality + English audio/subtitle warnings); seasons that
+// its episode list. Seasons in Plex show a source pill (quality + original-audio / English-subtitle warnings); seasons that
 // aren't show a per-season Download picker. When manual watched-editing is on (canEdit), unwatched aired episodes
 // reveal "Set watched" / "up to here" on hover, and every watched episode/season shows a click-to-edit watched date
 // with a date picker and a trash to unmark. The next-up episode gets an accent rail. All owner actions re-verify
@@ -38,8 +38,8 @@ export interface SeasonListSeason {
   fullyWatched: boolean;
   inPlex: boolean;
   videoLabel: string | null; // source pill text ("4K Dolby Vision", "1080p", …); null → no video info
-  noEnglishAudio: boolean; // season is in Plex with audio tracks but none in English
-  noEnglishSubtitles: boolean; // season is in Plex with subtitle tracks but none in English
+  audioWarning: string | null; // "No <original-language> audio" when a Plex season's audio lacks the show's original-language track; null otherwise
+  subtitleWarning: string | null; // "No English subtitles" when a Plex season's subtitles lack English; null otherwise
   downloadLinks: DownloadLink[]; // per-season search links, only when the season isn't in Plex
   latestWatchedISO: string | null; // season date-editor input value (its most recent episode watch)
   latestWatchedLabel: string | null; // "Mon YYYY" shown when the season is folded + fully watched
@@ -98,7 +98,7 @@ export function SeasonList({
       {seasons.map((s, si) => {
         const isOpen = !!open[s.seasonNumber];
         const seaKey = `sea:${s.seasonNumber}`;
-        const showPill = s.inPlex && (s.videoLabel || s.noEnglishAudio || s.noEnglishSubtitles);
+        const showPill = s.inPlex && (s.videoLabel || s.audioWarning || s.subtitleWarning);
         return (
           <div key={s.seasonNumber}>
             <div
@@ -138,16 +138,16 @@ export function SeasonList({
                   style={{ borderColor: "var(--color-border-elevated)", background: "rgba(255,255,255,0.04)", textOverflow: "ellipsis" }}
                 >
                   {s.videoLabel && <span className="text-[#a2a2ac]">{s.videoLabel}</span>}
-                  {s.noEnglishAudio && (
+                  {s.audioWarning && (
                     <>
                       <span className="text-[var(--color-faint)]">&ensp;·&ensp;</span>
-                      <span className="text-[#cf6f6b]">No English audio</span>
+                      <span className="text-[#cf6f6b]">{s.audioWarning}</span>
                     </>
                   )}
-                  {s.noEnglishSubtitles && (
+                  {s.subtitleWarning && (
                     <>
                       <span className="text-[var(--color-faint)]">&ensp;·&ensp;</span>
-                      <span className="text-[#cf6f6b]">No English subtitles</span>
+                      <span className="text-[#cf6f6b]">{s.subtitleWarning}</span>
                     </>
                   )}
                 </span>

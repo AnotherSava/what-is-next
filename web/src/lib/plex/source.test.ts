@@ -57,9 +57,9 @@ describe("deriveVideoSource", () => {
           {
             Stream: [
               { streamType: 1, colorTrc: "smpte2084", DOVIPresent: true },
-              { streamType: 2, language: "English", displayTitle: "English (TrueHD Atmos)" },
-              { streamType: 2, language: "English", displayTitle: "English (AC3 5.1)" }, // dup language
-              { streamType: 2, language: "French" },
+              { streamType: 2, language: "English", languageTag: "en-US", displayTitle: "English (TrueHD Atmos)" }, // BCP-47 → "en"
+              { streamType: 2, language: "English", languageTag: "en-US", displayTitle: "English (AC3 5.1)" }, // dup language
+              { streamType: 2, language: "French" }, // no languageTag → code null
               { streamType: 2 }, // no language → skipped
               { streamType: 3, language: "English" },
               { streamType: 3, language: "Spanish" },
@@ -70,10 +70,28 @@ describe("deriveVideoSource", () => {
       },
     ]);
     expect(s.audioTracks).toEqual([
-      { lang: "English", atmos: true },
-      { lang: "French", atmos: false },
+      { lang: "English", code: "en", atmos: true },
+      { lang: "French", code: null, atmos: false },
     ]);
     expect(s.subtitleLangs).toEqual(["English", "Spanish"]);
+  });
+
+  it("keeps a later same-language track's code when the first was untagged", () => {
+    const s = deriveVideoSource([
+      {
+        videoResolution: "1080",
+        height: 1080,
+        Part: [
+          {
+            Stream: [
+              { streamType: 2, language: "Русский" }, // untagged, seen first → code null
+              { streamType: 2, language: "Русский", languageTag: "ru" }, // same name, tagged → upgrades the code
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(s.audioTracks).toEqual([{ lang: "Русский", code: "ru", atmos: false }]);
   });
 });
 
@@ -92,11 +110,11 @@ describe("formatResolution", () => {
 describe("formatAudio / formatSubtitles", () => {
   it("joins audio languages with Atmos and caps the rest as +N more", () => {
     const tracks = [
-      { lang: "English", atmos: true },
-      { lang: "French", atmos: false },
-      { lang: "Spanish", atmos: false },
-      { lang: "German", atmos: false },
-      { lang: "Italian", atmos: false },
+      { lang: "English", code: "en", atmos: true },
+      { lang: "French", code: "fr", atmos: false },
+      { lang: "Spanish", code: "es", atmos: false },
+      { lang: "German", code: "de", atmos: false },
+      { lang: "Italian", code: "it", atmos: false },
     ];
     expect(formatAudio(tracks)).toEqual({ text: "English (Atmos) · French · Spanish · German", more: 1 });
   });

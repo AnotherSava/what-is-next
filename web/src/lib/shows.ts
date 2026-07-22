@@ -185,6 +185,7 @@ export interface ShowDetail {
   slug: string | null; // canonical URL slug; the page redirects an id-based URL to /shows/<slug>
   title: string;
   originalTitle: string | null;
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); drives the per-season "no original audio" warning
   overview: string | null;
   status: string | null;
   posterPath: string | null;
@@ -306,6 +307,7 @@ export async function getShowDetail(
     slug: item.slug,
     title: item.title,
     originalTitle: item.originalTitle,
+    originalLanguage: item.originalLanguage,
     overview: item.overview,
     status: item.status,
     posterPath: item.posterPath,

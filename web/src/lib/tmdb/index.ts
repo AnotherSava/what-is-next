@@ -2,4 +2,5 @@
 export { TmdbClient, TmdbError, getTmdb } from "./client";
 export { RateLimiter } from "./throttle";
 export { tmdbImageUrl } from "./images";
+export * from "./languages";
 export * from "./schemas";

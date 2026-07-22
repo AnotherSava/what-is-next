@@ -42,7 +42,8 @@ const plexStreamSchema = z.object({
   streamType: z.number().int(), // 1 = video, 2 = audio, 3 = subtitle
   colorTrc: z.string().nullish(), // transfer fn: "smpte2084" = HDR10 (PQ), "arib-std-b67" = HLG, else SDR (bt709)
   DOVIPresent: z.boolean().nullish(), // Dolby Vision present on this (video) stream
-  language: z.string().nullish(), // human language name, e.g. "English" (audio + subtitle rows)
+  language: z.string().nullish(), // human language name, e.g. "English" / "Русский" (audio + subtitle rows) — display
+  languageTag: z.string().nullish(), // Plex language tag, often BCP-47 ("en" | "en-US" | "ru"); normalized to a bare ISO 639-1 subtag in source.ts for matching
   title: z.string().nullish(), // ↓ these three are scanned for "Atmos" to flag an Atmos audio track
   displayTitle: z.string().nullish(),
   extendedDisplayTitle: z.string().nullish(),

@@ -81,6 +81,7 @@ export const tmdbTvDetailSchema = z.object({
   id: z.number().int(),
   name: z.string(),
   original_name: z.string().nullish(),
+  original_language: z.string().nullish(), // ISO 639-1 code of the show's original language, e.g. "en" | "ru" | "es"
   overview: z.string().nullish(),
   first_air_date: z.string().nullish(),
   status: z.string().nullish(), // "Returning Series" | "Ended" | "Canceled" | "In Production" | "Planned" | ...
@@ -127,6 +128,7 @@ export const tmdbMovieDetailSchema = z.object({
   id: z.number().int(),
   title: z.string(),
   original_title: z.string().nullish(),
+  original_language: z.string().nullish(), // ISO 639-1 code of the movie's original language, e.g. "en" | "ru" | "es"
   overview: z.string().nullish(),
   release_date: z.string().nullish(),
   status: z.string().nullish(), // "Released" | "Post Production" | "Planned" | ...

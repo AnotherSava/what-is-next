@@ -35,22 +35,23 @@ model MediaItem {
   tvdbId Int?
   imdbId String?
 
-  title         String
-  slug          String? // URL slug derived from title, unique per mediaType; regenerated when the title changes.
+  title            String
+  slug             String? // URL slug derived from title, unique per mediaType; regenerated when the title changes.
   //                       Null until backfilled/first hydrated — the detail route falls back to the id then.
-  originalTitle String?
-  overview      String?
-  releaseDate   String? // ISO date string (TMDB convention)
-  status        String? // TMDB airing status: "Returning Series" | "Ended" | "Canceled" | ...
-  runtime       Int? // minutes
-  posterPath    String? // TMDB path; rendered via configured image base
-  backdropPath  String?
-  genres        String? // JSON string[] + zod (printlab convention)
-  tmdbRating    Float?
-  imdbRating    Float? // IMDb community score (0–10), fetched from OMDb by imdbId. Null when unresolved/unfetched.
-  director      String? // movie director(s) from TMDB credits, comma-joined; null for TV / unresolved / unfetched.
-  creator       String? // TV show creator(s) from TMDB (created_by), comma-joined; null for movies / unresolved / unfetched.
-  cast          String? // top-billed cast (movie or TV) from TMDB credits as JSON [{name,character,profilePath}] in
+  originalTitle    String?
+  originalLanguage String? // TMDB original_language code, mostly ISO 639-1 ("en" | "ru" | ...); null for TVDB-sourced rows. Resolve to a name via lib/tmdb/languages.ts.
+  overview         String?
+  releaseDate      String? // ISO date string (TMDB convention)
+  status           String? // TMDB airing status: "Returning Series" | "Ended" | "Canceled" | ...
+  runtime          Int? // minutes
+  posterPath       String? // TMDB path; rendered via configured image base
+  backdropPath     String?
+  genres           String? // JSON string[] + zod (printlab convention)
+  tmdbRating       Float?
+  imdbRating       Float? // IMDb community score (0–10), fetched from OMDb by imdbId. Null when unresolved/unfetched.
+  director         String? // movie director(s) from TMDB credits, comma-joined; null for TV / unresolved / unfetched.
+  creator          String? // TV show creator(s) from TMDB (created_by), comma-joined; null for movies / unresolved / unfetched.
+  cast             String? // top-billed cast (movie or TV) from TMDB credits as JSON [{name,character,profilePath}] in
   //                       billing order; null when unresolved / unfetched. Parsed via lib/cast.ts (parseCast).
 
   numberOfSeasons  Int? // denormalized for list views; recomputed on refresh
@@ -242,21 +243,21 @@ model ListItem {
 // show-level presence; rows with seasonNumber mark which TV seasons are present. A sync REPLACES the whole set
 // for the user (deleteMany + createMany), so there's no upsert/null-unique concern.
 model PlexPresence {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mediaItemId   String
-  mediaItem     MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-  seasonNumber  Int? // null = movie / show-level; set = a specific TV season present in Plex
-  plexRatingKey String? // the item's Plex ratingKey (the show/movie, not the season) — used to deep-link into
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItemId     String
+  mediaItem       MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  seasonNumber    Int? // null = movie / show-level; set = a specific TV season present in Plex
+  plexRatingKey   String? // the item's Plex ratingKey (the show/movie, not the season) — used to deep-link into
   //                        Plex to watch it. Same value on every row of a show; null on rows written before this
   //                        column existed, until the next sync back-fills them.
   videoResolution String? // movie source resolution from Plex ("4k"|"1080"|…); null for shows/seasons or unknown.
   //                          Populated per matched movie each sync (see sync.ts deriveVideoSource); movie page rows.
   hdrFormat       String? // movie HDR format, combined: "Dolby Vision · HDR10" | "HDR10" | "HLG"; null = SDR. Movies only.
-  audioTracks     String? // movie audio languages as JSON [{lang,atmos}] (best copy, in track order). Movies only.
-  subtitleLangs   String? // movie subtitle languages as JSON string[] (best copy, in track order). Movies only.
-  updatedAt     DateTime  @updatedAt
+  audioTracks     String? // audio languages as JSON [{lang,code,atmos}] (best copy, in track order); movie + per-season rows.
+  subtitleLangs   String? // subtitle languages as JSON string[] (best copy, in track order); movie + per-season rows.
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId, mediaItemId])
   @@index([userId])

@@ -4,7 +4,8 @@ import type { PlexMedia } from "./schemas";
 // languages — for the movie page's Video / Audio / Subtitles spec rows. Pure and dependency-free (testable).
 
 export interface AudioTrack {
-  lang: string;
+  lang: string; // human language name (Plex-embedded, may be native script e.g. "Русский") — for display
+  code: string | null; // primary ISO 639-1 subtag ("en"|"ru"|…), normalized from Plex's tag (e.g. "en-US" → "en"); null when untagged
   atmos: boolean; // Dolby Atmos present on any track of this language
 }
 export interface VideoSource {
@@ -72,10 +73,14 @@ function audioTracksFrom(streams: Stream[]): AudioTrack[] {
   for (const s of streams) {
     const lang = (s.language ?? "").trim();
     if (!lang) continue;
+    // Plex tags can be BCP-47 ("en-US"|"pt-BR"|…); keep only the primary subtag so it matches a bare ISO-639-1 original.
+    const code = (s.languageTag ?? "").trim().split("-")[0].toLowerCase() || null;
     const atmos = /atmos/i.test(`${s.title ?? ""} ${s.displayTitle ?? ""} ${s.extendedDisplayTitle ?? ""}`);
     const existing = out.find((a) => a.lang === lang);
-    if (existing) existing.atmos = existing.atmos || atmos;
-    else out.push({ lang, atmos });
+    if (existing) {
+      existing.atmos = existing.atmos || atmos;
+      existing.code = existing.code ?? code; // a later same-name track may carry the tag an earlier one lacked
+    } else out.push({ lang, code, atmos });
   }
   return out;
 }

@@ -29,7 +29,7 @@ export interface PresenceRow {
   // (sourceDerived); when omitted, applyPresence carries the previously-stored source for this row forward.
   videoResolution?: string | null; // source resolution ("4k"|"1080"|…) from Plex
   hdrFormat?: string | null; // combined HDR label ("Dolby Vision · HDR10"|…); null = SDR
-  audioTracks?: string | null; // audio languages as JSON [{lang,atmos}]
+  audioTracks?: string | null; // audio languages as JSON [{lang,code,atmos}]
   subtitleLangs?: string | null; // subtitle languages as JSON string[]
   sourceDerived?: boolean; // true = the four source fields were derived this sync (else inherit the stored ones)
 }

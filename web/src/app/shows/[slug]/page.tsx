@@ -9,6 +9,7 @@ import { isEndedStatus } from "@/lib/progress";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getDownloadSources, getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
 import { getShowDetail } from "@/lib/shows";
+import { languageName } from "@/lib/tmdb";
 import { CastColumn } from "../_components/CastColumn";
 import { SeasonList, type SeasonListSeason } from "../_components/SeasonList";
 import { ShowHeroMenu } from "../_components/ShowHeroMenu";
@@ -60,8 +61,14 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
   const lastRegular = regular.length ? regular[regular.length - 1].seasonNumber : (show.seasons.at(-1)?.seasonNumber ?? null);
   const initialOpenSeason = progress.nextUp?.seasonNumber ?? lastRegular;
 
+  // The show's original-language audio is the track you'd watch it in; warn per season when it's absent from Plex.
+  // Unknown original (TVDB-sourced / not-yet-refreshed / the "xx" no-language placeholder) → no audio warning at all.
+  const originalAudioLang = show.originalLanguage && show.originalLanguage !== "xx" ? languageName(show.originalLanguage) : null;
+
   const seasonRows: SeasonListSeason[] = show.seasons.map((s) => {
     const source = s.source;
+    const audioTracks = source?.audioTracks ?? [];
+    const subtitleLangs = source?.subtitleLangs ?? [];
     const videoLabel = source ? [formatResolution(source.videoResolution), source.hdrFormat].filter(Boolean).join(" ") || null : null;
     const query = s.isSpecials ? show.title : `${show.title} S${String(s.seasonNumber).padStart(2, "0")}`;
     return {
@@ -73,8 +80,8 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
       fullyWatched: s.airedCount > 0 && s.watchedCount >= s.airedCount,
       inPlex: s.inPlex,
       videoLabel,
-      noEnglishAudio: !!source && source.audioTracks.length > 0 && !source.audioTracks.some((t) => t.lang === "English"),
-      noEnglishSubtitles: !!source && source.subtitleLangs.length > 0 && !source.subtitleLangs.includes("English"),
+      audioWarning: originalAudioLang && audioTracks.length > 0 && !audioTracks.some((t) => t.code === show.originalLanguage || (t.code == null && t.lang === originalAudioLang)) ? `No ${originalAudioLang} audio` : null,
+      subtitleWarning: subtitleLangs.length > 0 && !subtitleLangs.includes("English") ? "No English subtitles" : null,
       downloadLinks: s.inPlex ? [] : downloadLinksFor(sources, "shows", query),
       latestWatchedISO: s.latestWatchedAtISO,
       latestWatchedLabel: s.latestWatchedAtLabel,
