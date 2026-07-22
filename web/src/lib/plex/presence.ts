@@ -69,20 +69,47 @@ function parseJson<T>(raw: string | null, fallback: T): T {
   }
 }
 
-// Presence for one show in a single query: which seasons are in Plex and the show's ratingKey (for a watch link).
+// One season's Plex source (resolution/HDR/audio/subtitles), for the show detail page's per-season media pill.
+// Same shape as a movie's source minus the ratingKey — a show has one presence row per season, each carrying its
+// own source, since quality often differs across seasons.
+export interface SeasonPlexSource {
+  videoResolution: string | null; // raw Plex token ("4k"|"1080"|…); format for display via source.ts formatResolution
+  hdrFormat: string | null; // combined HDR label ("Dolby Vision · HDR10"|…); null = SDR/unknown
+  audioTracks: AudioTrack[]; // audio-row languages, [] when unknown
+  subtitleLangs: string[]; // subtitle-row languages, [] when unknown
+}
+
+// Presence for one show in a single query: which seasons are in Plex, each in-Plex season's source (for the media
+// pill), and the show's ratingKey (for a watch link). Membership in `seasons` == "this season is in Plex".
 export async function getShowPlexPresence(
   userId: string,
   mediaItemId: string,
-): Promise<{ seasons: Set<number>; ratingKey: string | null }> {
+): Promise<{ seasons: Set<number>; sources: Map<number, SeasonPlexSource>; ratingKey: string | null }> {
   const rows = await getPrisma().plexPresence.findMany({
     where: { userId, mediaItemId },
-    select: { seasonNumber: true, plexRatingKey: true },
+    select: {
+      seasonNumber: true,
+      plexRatingKey: true,
+      videoResolution: true,
+      hdrFormat: true,
+      audioTracks: true,
+      subtitleLangs: true,
+    },
   });
   const seasons = new Set<number>();
+  const sources = new Map<number, SeasonPlexSource>();
   let ratingKey: string | null = null;
   for (const r of rows) {
-    if (r.seasonNumber != null) seasons.add(r.seasonNumber);
+    if (r.seasonNumber != null) {
+      seasons.add(r.seasonNumber);
+      sources.set(r.seasonNumber, {
+        videoResolution: r.videoResolution,
+        hdrFormat: r.hdrFormat,
+        audioTracks: parseJson<AudioTrack[]>(r.audioTracks, []),
+        subtitleLangs: parseJson<string[]>(r.subtitleLangs, []),
+      });
+    }
     if (r.plexRatingKey != null) ratingKey = r.plexRatingKey;
   }
-  return { seasons, ratingKey };
+  return { seasons, sources, ratingKey };
 }

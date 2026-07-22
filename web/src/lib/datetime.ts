@@ -48,6 +48,17 @@ export function displayMonthYear(date: Date, timeZone: string | undefined = proc
   }
 }
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// A plain "YYYY-MM-DD" calendar date as "Mon YYYY" ("2026-07-15" → "Jul 2026"). PURE string transform — no Date,
+// no timezone: release dates are calendar dates, not moments, so parsing them through a Date would risk a TZ
+// day-shift. Returns the input unchanged when it isn't an ISO date. Used for episode "airs Mon YYYY" labels.
+export function monthYearISO(iso: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${MONTH_ABBR[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
+}
+
 // Date N days from `from`, as "YYYY-MM-DD" in the given timezone. Used for the "next 2 weeks" upcoming window.
 export function isoDatePlusDays(days: number, from: Date = new Date(), timeZone?: string): string {
   const shifted = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);

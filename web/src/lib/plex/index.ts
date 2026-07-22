@@ -13,7 +13,13 @@ export {
   type UnaccountedItem,
   type WatchedSignal,
 } from "./sync";
-export { getMoviePlexPresence, getPlexEpisodePresence, getPlexPresenceKeys, getShowPlexPresence } from "./presence";
+export {
+  getMoviePlexPresence,
+  getPlexEpisodePresence,
+  getPlexPresenceKeys,
+  getShowPlexPresence,
+  type SeasonPlexSource,
+} from "./presence";
 export { type AudioTrack, formatAudio, formatResolution, formatSubtitles } from "./source";
 export { plexWatchUrl, plexWebUrl } from "./link";
 export { plexDeps, syncPlexPresence, syncPlexPresenceIfStale, viewSyncTtlMs } from "./run";

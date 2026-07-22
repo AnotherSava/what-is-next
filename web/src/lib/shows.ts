@@ -1,7 +1,7 @@
 import { type CastMember, parseCast } from "@/lib/cast";
-import { displayDate, todayISO } from "@/lib/datetime";
+import { displayMonthYear, isoDate, monthYearISO, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
-import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured } from "@/lib/plex";
+import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured, type SeasonPlexSource } from "@/lib/plex";
 import {
   compareEpisodes,
   computeShowProgress,
@@ -161,18 +161,23 @@ export interface ShowDetailEpisode {
   isSpecial: boolean;
   aired: boolean;
   watched: boolean;
-  watchedAt: string | null; // local calendar date of the (most recent) watch; null = watched but date unknown, or unwatched
+  watchedAtISO: string | null; // machine "YYYY-MM-DD" of the (most recent) watch — the date-editor input value; null = undated/unwatched
+  watchedAtLabel: string | null; // human "Mon YYYY" of that watch, for the row's watched-on stamp; null = undated/unwatched
+  airsLabel: string | null; // for unaired episodes: "airs Mon YYYY" (or "unaired" when the release date is unknown); null once aired
 }
 
 export interface ShowDetailSeason {
   seasonNumber: number;
   isSpecials: boolean;
   title: string | null;
+  year: number | null; // earliest episode release year in the season — shown beside the season name
   episodes: ShowDetailEpisode[];
   airedCount: number;
   watchedCount: number;
   inPlex: boolean;
-  latestWatchedAt: string | null; // most recent watch across the season's episodes; shown in the header when folded
+  source: SeasonPlexSource | null; // this season's Plex source (resolution/HDR/audio/subs) for the media pill; null when not in Plex
+  latestWatchedAtISO: string | null; // machine date of the season's most recent watch — the season date-editor input value
+  latestWatchedAtLabel: string | null; // human "Mon YYYY" of that watch, shown in the header when the season is folded + fully watched
 }
 
 export interface ShowDetail {
@@ -185,9 +190,12 @@ export interface ShowDetail {
   posterPath: string | null;
   backdropPath: string | null;
   tmdbId: number | null;
+  tmdbRating: number | null; // TMDB community score (0–10)
+  imdbRating: number | null; // IMDb community score (0–10), fetched from OMDb; the poster ★ chip prefers it over TMDB
   releaseDate: string | null;
   creator: string | null; // show creator(s), comma-joined; null when unresolved
   cast: CastMember[]; // top-billed cast for the "Top cast" grid + "Stars" line; [] when unresolved
+  tracked: boolean; // has a UserMediaState row — i.e. on your list / stopped (drives the ⋯ "remove" vs "stop" wording)
   wantToWatch: boolean;
   isFavorite: boolean;
   progress: ShowProgress;
@@ -220,7 +228,7 @@ export async function getShowDetail(
     }),
     isPlexConfigured()
       ? getShowPlexPresence(userId, showId)
-      : Promise.resolve({ seasons: new Set<number>(), ratingKey: null }),
+      : Promise.resolve({ seasons: new Set<number>(), sources: new Map<number, SeasonPlexSource>(), ratingKey: null }),
   ]);
   const watched = watchedEpisodeIds(seen);
   // Most recent dated watch per episode (a rewatch adds another SeenEvent); undated watches contribute nothing.
@@ -238,6 +246,8 @@ export async function getShowDetail(
   });
 
   const episodesBySeason = new Map<number, ShowDetailEpisode[]>();
+  // Earliest known release date per season (any episode) → the "(year)" beside the season name.
+  const seasonEarliest = new Map<number, string>();
   for (const ep of [...item.episodes].sort(compareEpisodes)) {
     const aired = hasAired(ep.releaseDate, today);
     const watchedAt = watchedAtByEpisode.get(ep.id);
@@ -251,11 +261,17 @@ export async function getShowDetail(
       isSpecial: ep.isSpecial,
       aired,
       watched: watched.has(ep.id),
-      watchedAt: watchedAt ? displayDate(watchedAt) : null,
+      watchedAtISO: watchedAt ? isoDate(watchedAt) : null,
+      watchedAtLabel: watchedAt ? displayMonthYear(watchedAt) : null,
+      airsLabel: aired ? null : ep.releaseDate ? `airs ${monthYearISO(ep.releaseDate)}` : "unaired",
     };
     const arr = episodesBySeason.get(ep.seasonNumber);
     if (arr) arr.push(row);
     else episodesBySeason.set(ep.seasonNumber, [row]);
+    if (ep.releaseDate) {
+      const cur = seasonEarliest.get(ep.seasonNumber);
+      if (!cur || ep.releaseDate < cur) seasonEarliest.set(ep.seasonNumber, ep.releaseDate);
+    }
   }
 
   const seasons: ShowDetailSeason[] = item.seasons
@@ -266,15 +282,19 @@ export async function getShowDetail(
         const w = watchedAtByEpisode.get(e.id);
         if (w && (!latest || w > latest)) latest = w;
       }
+      const earliest = seasonEarliest.get(s.seasonNumber);
       return {
         seasonNumber: s.seasonNumber,
         isSpecials: s.isSpecials,
         title: s.title,
+        year: earliest ? Number(earliest.slice(0, 4)) : null,
         episodes,
         airedCount: episodes.filter((e) => e.aired).length,
         watchedCount: episodes.filter((e) => e.watched).length,
         inPlex: plexPresence.seasons.has(s.seasonNumber),
-        latestWatchedAt: latest ? displayDate(latest) : null,
+        source: plexPresence.sources.get(s.seasonNumber) ?? null,
+        latestWatchedAtISO: latest ? isoDate(latest) : null,
+        latestWatchedAtLabel: latest ? displayMonthYear(latest) : null,
       };
     })
     // Specials (season 0) sort ahead of Season 1 by number, but they're side content — show them after the
@@ -291,9 +311,12 @@ export async function getShowDetail(
     posterPath: item.posterPath,
     backdropPath: item.backdropPath,
     tmdbId: item.tmdbId,
+    tmdbRating: item.tmdbRating,
+    imdbRating: item.imdbRating,
     releaseDate: item.releaseDate,
     creator: item.creator,
     cast: parseCast(item.cast),
+    tracked: state != null,
     wantToWatch: state?.wantToWatch ?? false,
     isFavorite: state?.isFavorite ?? false,
     progress,
