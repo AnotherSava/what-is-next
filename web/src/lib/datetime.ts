@@ -59,6 +59,16 @@ export function monthYearISO(iso: string): string {
   return `${MONTH_ABBR[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
 }
 
+// A plain "YYYY-MM-DD" calendar date as a human "Mon D, YYYY" ("2026-07-15" → "Jul 15, 2026"). PURE string
+// transform — no Date, no timezone (same rationale as monthYearISO): a stored watch date shouldn't be re-parsed
+// through a Date and risk a TZ day-shift. Returns the input unchanged when it isn't an ISO date. Used for the
+// watched stamps' hover tooltip, which reveals the exact day the compact "Mon YYYY" label hides.
+export function displayDateISO(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${MONTH_ABBR[Number(m[2]) - 1] ?? m[2]} ${Number(m[3])}, ${m[1]}`;
+}
+
 // Date N days from `from`, as "YYYY-MM-DD" in the given timezone. Used for the "next 2 weeks" upcoming window.
 export function isoDatePlusDays(days: number, from: Date = new Date(), timeZone?: string): string {
   const shifted = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);

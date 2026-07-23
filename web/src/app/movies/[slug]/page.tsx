@@ -4,7 +4,7 @@ import { BackLink } from "@/app/_components/BackLink";
 import { TopCast } from "@/app/_components/TopCast";
 import { MovieHeroMenu } from "@/app/movies/_components/MovieHeroActions";
 import { MovieHeroPoster } from "@/app/movies/_components/MovieHeroPoster";
-import { displayMonthYear, todayISO } from "@/lib/datetime";
+import { displayDate, displayMonthYear, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { downloadLinksFor } from "@/lib/downloadSources";
 import { formatRuntime } from "@/lib/format";
@@ -43,6 +43,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
   const watchedStamp = movie.watched
     ? `WATCHED${movie.watchedAt ? ` · ${displayMonthYear(movie.watchedAt).toUpperCase()}` : ""}`
     : null;
+  const watchedTitle = movie.watched && movie.watchedAt ? displayDate(movie.watchedAt) : null;
   const downloadLinks = downloadLinksFor(sources, "movies", movie.title);
 
   // Plex source spec rows (in-Plex movies only): resolution + HDR, audio-track languages, subtitle languages.
@@ -82,6 +83,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
             isFavorite={movie.isFavorite}
             canFavorite={canEdit}
             watchedStamp={watchedStamp}
+            watchedTitle={watchedTitle}
           />
 
           <div className="flex min-w-0 flex-1 flex-col">

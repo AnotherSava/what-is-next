@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useState, useTransition } from "react";
+import { displayDateISO } from "@/lib/datetime";
 import type { DownloadLink } from "@/lib/downloadSources";
 import {
   markSeasonWatched,
@@ -211,6 +212,7 @@ export function SeasonList({
                     <DateTrigger
                       canEdit={canEdit}
                       label={s.latestWatchedLabel ?? (canEdit ? "Set date" : "")}
+                      title={s.latestWatchedISO ? displayDateISO(s.latestWatchedISO) : undefined}
                       onOpen={() => setEditing(seaKey)}
                     />
                   )}
@@ -269,6 +271,7 @@ export function SeasonList({
                         <DateTrigger
                           canEdit={canEdit}
                           label={ep.watchedLabel ?? (canEdit ? "Set date" : "")}
+                          title={ep.watchedISO ? displayDateISO(ep.watchedISO) : undefined}
                           onOpen={() => setEditing(epKey)}
                         />
                       )}
@@ -310,12 +313,13 @@ const POPOVER = {
 } as const;
 
 // The click-to-edit watched-date stamp. Owner → a button that opens the date editor; viewer → plain text (or
-// nothing when there's no date to show).
-function DateTrigger({ canEdit, label, onOpen }: { canEdit: boolean; label: string; onOpen: () => void }) {
+// nothing when there's no date to show). `title` is the full "Mon D, YYYY" watch date, surfaced on hover since the
+// visible label compresses it to "Mon YYYY".
+function DateTrigger({ canEdit, label, title, onOpen }: { canEdit: boolean; label: string; title?: string; onOpen: () => void }) {
   if (!label) return null;
-  if (!canEdit) return <span className="font-num text-[12px] whitespace-nowrap text-[#8b9be0]">{label}</span>;
+  if (!canEdit) return <span className="font-num text-[12px] whitespace-nowrap text-[#8b9be0] cursor-default" title={title}>{label}</span>;
   return (
-    <button type="button" className="se-datebtn font-num text-[12px] whitespace-nowrap text-[#8b9be0]" onClick={onOpen}>
+    <button type="button" className="se-datebtn font-num text-[12px] whitespace-nowrap text-[#8b9be0]" title={title} onClick={onOpen}>
       {label}
     </button>
   );

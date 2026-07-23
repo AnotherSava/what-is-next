@@ -18,6 +18,7 @@ export type ShowCardData = {
   isFavorite: boolean;
   group: "behind" | "up-to-date" | "planned" | "finished" | "stopped";
   lastText: string;
+  lastTitle: string; // exact last-watched date behind lastText's relative "N ago"; "" when none
   nextCode: string | null;
   nextTitle: string | null;
   moreCount: number;
@@ -98,7 +99,7 @@ export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFa
                   isFavorite={s.isFavorite}
                   canFavorite={canFavorite}
                 >
-                  <CardTitle title={s.title} aside={s.lastText} />
+                  <CardTitle title={s.title} aside={s.lastText} asideTitle={s.lastTitle || undefined} />
                   {s.nextCode && <CardNextRow code={s.nextCode} epTitle={s.nextTitle} moreCount={s.moreCount} />}
                 </PosterCard>
               ))}

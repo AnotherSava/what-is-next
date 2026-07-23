@@ -44,12 +44,13 @@ export function RatingBadge({ value, className = "" }: { value: number; classNam
 }
 
 // The card's title row: bold title (truncates) with an optional muted aside pinned right (a year, "N ago", …).
-export function CardTitle({ title, aside }: { title: string; aside?: ReactNode }) {
+// `asideTitle` is the aside's hover tooltip — e.g. the exact last-watched date behind a relative "3mo ago".
+export function CardTitle({ title, aside, asideTitle }: { title: string; aside?: ReactNode; asideTitle?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="wn-titlelink font-display truncate text-[15px] font-bold">{title}</span>
       {aside != null && aside !== "" && (
-        <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]">{aside}</span>
+        <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]" title={asideTitle}>{aside}</span>
       )}
     </div>
   );

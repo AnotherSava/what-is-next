@@ -20,6 +20,7 @@ export function MovieHeroPoster({
   isFavorite,
   canFavorite,
   watchedStamp,
+  watchedTitle,
 }: {
   movieId: string;
   title: string;
@@ -31,6 +32,7 @@ export function MovieHeroPoster({
   isFavorite: boolean;
   canFavorite: boolean;
   watchedStamp: string | null; // e.g. "WATCHED · JUN 2026"; null when unwatched
+  watchedTitle: string | null; // full "Mon D, YYYY" watch date, revealed on hover; null when the watch is undated
 }) {
   const url = posterUrl(posterPath, "w342");
 
@@ -76,7 +78,15 @@ export function MovieHeroPoster({
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ededf0" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M20 6L9 17l-5-5" />
           </svg>
-          <span className="font-num text-[10px] font-semibold tracking-[0.04em] whitespace-nowrap text-[var(--color-text)]">{watchedStamp}</span>
+          {/* Re-enable pointer events on just the text (the strip stays click-through so the poster's play/download
+              hover still works) so its title tooltip reveals the exact watch day the "· JUN 2026" label hides. */}
+          <span
+            className="font-num text-[10px] font-semibold tracking-[0.04em] whitespace-nowrap text-[var(--color-text)]"
+            style={watchedTitle ? { pointerEvents: "auto", cursor: "default" } : undefined}
+            title={watchedTitle ?? undefined}
+          >
+            {watchedStamp}
+          </span>
         </div>
       )}
     </div>

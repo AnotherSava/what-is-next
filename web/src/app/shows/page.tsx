@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { nowMs } from "@/lib/datetime";
+import { displayDate, nowMs } from "@/lib/datetime";
 import { formatInterval } from "@/lib/format";
 import { isPlexConfigured, plexWatchUrl } from "@/lib/plex";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
@@ -59,6 +59,7 @@ export default async function ShowsPage() {
         isFavorite: s.isFavorite,
         group: s.group as Exclude<VisibleGroup, "off-list">,
         lastText: behind && s.lastWatchedAt ? `${formatInterval(now - s.lastWatchedAt.getTime())} ago` : "",
+        lastTitle: behind && s.lastWatchedAt ? displayDate(s.lastWatchedAt) : "",
         nextCode: behind && n ? `S${n.seasonNumber} · E${n.episodeNumber}` : null,
         nextTitle: behind ? s.nextUpTitle : null,
         moreCount: behind ? s.progress.unwatchedAiredCount - 1 : 0,
