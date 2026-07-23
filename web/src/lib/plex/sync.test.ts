@@ -173,7 +173,7 @@ describe("scanPlex", () => {
           sourceDerived: true,
           videoResolution: "1080",
           hdrFormat: null,
-          audioTracks: '[{"lang":"English","atmos":false}]',
+          audioTracks: '[{"lang":"English","code":null,"atmos":false}]',
           subtitleLangs: '["English"]',
         },
         // The matched movie also carries its Plex source (resolution/HDR/audio/subtitles) captured via getItemMedia.
@@ -184,7 +184,7 @@ describe("scanPlex", () => {
           sourceDerived: true,
           videoResolution: "1080",
           hdrFormat: null,
-          audioTracks: '[{"lang":"English","atmos":false}]',
+          audioTracks: '[{"lang":"English","code":null,"atmos":false}]',
           subtitleLangs: '["English"]',
         },
       ]),
@@ -243,7 +243,7 @@ describe("applyPresence", () => {
     const movieRow = rows.find((x) => x.mediaItemId === "mi-movie");
     expect(movieRow?.videoResolution).toBe("1080");
     expect(movieRow?.hdrFormat).toBeNull();
-    expect(movieRow?.audioTracks).toBe('[{"lang":"English","atmos":false}]');
+    expect(movieRow?.audioTracks).toBe('[{"lang":"English","code":null,"atmos":false}]');
     expect(movieRow?.subtitleLangs).toBe('["English"]');
   });
 
@@ -272,7 +272,7 @@ describe("per-season Plex source", () => {
       sourceDerived: true,
       videoResolution: "1080",
       hdrFormat: null,
-      audioTracks: '[{"lang":"English","atmos":false}]',
+      audioTracks: '[{"lang":"English","code":null,"atmos":false}]',
       subtitleLangs: '["English"]',
     });
     expect(r.sourceCursor.s1).toBe(1); // one season sourced
@@ -297,7 +297,7 @@ describe("per-season Plex source", () => {
     const r1 = await scanPlex(deps());
     await applyPresence(prisma, "owner", r1.presenceRows);
     let row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
-    expect(row?.audioTracks).toBe('[{"lang":"English","atmos":false}]');
+    expect(row?.audioTracks).toBe('[{"lang":"English","code":null,"atmos":false}]');
 
     // Second sync: the show's episode count moved (presenceCursor 2 → now 3) so the whole show re-derives, but the
     // representative episode's detail fetch now fails. The season must NOT be marked derived, so applyPresence keeps
@@ -315,7 +315,7 @@ describe("per-season Plex source", () => {
 
     await applyPresence(prisma, "owner", r2.presenceRows);
     row = await prisma.plexPresence.findFirst({ where: { userId: "owner", mediaItemId: "mi-show", seasonNumber: 1 } });
-    expect(row?.audioTracks).toBe('[{"lang":"English","atmos":false}]'); // preserved, NOT nulled by the failed fetch
+    expect(row?.audioTracks).toBe('[{"lang":"English","code":null,"atmos":false}]'); // preserved, NOT nulled by the failed fetch
     expect(row?.videoResolution).toBe("1080");
   });
 });
