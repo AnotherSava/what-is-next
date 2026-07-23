@@ -2,7 +2,8 @@ import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { getMovies } from "@/lib/movies";
 import { getPlexEpisodePresence, isPlexConfigured } from "@/lib/plex";
-import { compareEpisodes, hasAired, type ProgressEpisode } from "@/lib/progress";
+import { compareEpisodes, fullyAiredSeasons, hasAired, isEndedStatus, type ProgressEpisode } from "@/lib/progress";
+import { isWaitForFullSeasonEnabled } from "@/lib/settings";
 import { getFollowedShows } from "@/lib/shows";
 
 // Data for the "Download" view: tracked shows with aired episodes that aren't in your Plex library yet, split
@@ -60,28 +61,45 @@ interface EpisodeRow extends ProgressEpisode {
 
 // The aired, unwatched, not-in-Plex episodes of a show — the ones you'd download — in (season, episode) order.
 // PURE: Plex presence is passed in. Specials are excluded, mirroring progress.ts's counted-episode rule.
+// `completeSeasons`, when passed, restricts the result to those seasons — the "wait for the full season to air"
+// preference, so a still-airing season isn't offered for download until it finishes.
 export function missingFromPlex(
   episodes: EpisodeRow[],
   watchedIds: Set<string>,
   presentIds: Set<string>,
   today: string,
+  completeSeasons?: Set<number> | null,
 ): EpisodeRow[] {
   return episodes
-    .filter((e) => !e.isSpecial && hasAired(e.releaseDate, today) && !watchedIds.has(e.id) && !presentIds.has(e.id))
+    .filter(
+      (e) =>
+        !e.isSpecial &&
+        hasAired(e.releaseDate, today) &&
+        !watchedIds.has(e.id) &&
+        !presentIds.has(e.id) &&
+        (!completeSeasons || completeSeasons.has(e.seasonNumber)),
+    )
     .sort(compareEpisodes);
 }
 
 // How many aired, unwatched, non-special episodes of a show ARE in Plex — episodes you can still watch without
 // downloading anything. PURE. Zero means you've watched everything you currently have (the "Get back" case);
-// greater than zero means there's still downloaded stuff to watch (the "More of" case).
+// greater than zero means there's still downloaded stuff to watch (the "More of" case). `completeSeasons`, when
+// passed, restricts the count to those seasons — matching missingFromPlex so a waited-on season counts on neither side.
 export function unwatchedInPlexCount(
   episodes: EpisodeRow[],
   watchedIds: Set<string>,
   presentIds: Set<string>,
   today: string,
+  completeSeasons?: Set<number> | null,
 ): number {
   return episodes.filter(
-    (e) => !e.isSpecial && hasAired(e.releaseDate, today) && !watchedIds.has(e.id) && presentIds.has(e.id),
+    (e) =>
+      !e.isSpecial &&
+      hasAired(e.releaseDate, today) &&
+      !watchedIds.has(e.id) &&
+      presentIds.has(e.id) &&
+      (!completeSeasons || completeSeasons.has(e.seasonNumber)),
   ).length;
 }
 
@@ -93,7 +111,11 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
   // Reuse the shared grouping so "started" (Behind) and "not started" (Planned) never drift from the rest of the
   // app; only these two groups can have anything left to download (Up-to-date/Finished have no unwatched aired
   // episodes, Stopped isn't wanted). getFollowedShows already applies the favorite→Planned coercion.
-  const [shows, moviesView] = await Promise.all([getFollowedShows(userId, today), getMovies(userId)]);
+  const [shows, moviesView, waitForFullSeason] = await Promise.all([
+    getFollowedShows(userId, today),
+    getMovies(userId),
+    isWaitForFullSeasonEnabled(),
+  ]);
   // Movies column: watchlist (unwatched) titles that aren't in the user's Plex library AND have already been
   // released — the ones you could actually go and grab. hasAired doubles as "has this movie come out?" (a null or
   // future release date counts as not released, mirroring the shows' aired-episode rule). Keeps getMovies'
@@ -165,8 +187,11 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
   const analyze = (s: (typeof relevant)[number]): { row: DownloadShow; inPlexLeft: number } | null => {
     const eps = episodesByShow.get(s.id) ?? [];
     const watched = watchedByShow.get(s.id) ?? new Set<string>();
-    const missing = missingFromPlex(eps, watched, presentIds, today);
-    if (missing.length === 0) return null; // behind/planned, but everything aired is already in Plex
+    // "Wait for the full season to air": only fully-aired seasons are downloadable, so a show whose only missing
+    // episodes are in a still-airing season drops out entirely. Ended shows are exempt (mirrors computeShowProgress).
+    const completeSeasons = waitForFullSeason && !isEndedStatus(s.status) ? fullyAiredSeasons(eps, today) : null;
+    const missing = missingFromPlex(eps, watched, presentIds, today, completeSeasons);
+    if (missing.length === 0) return null; // behind/planned, but everything aired is already in Plex (or being waited on)
     const ms = lastWatchMs.get(s.id);
     // Seasons with ≥1 aired episode not in Plex yet (the ones to download) — rendered as a range on the show's
     // download row. Derived from the same `missing` set, so it never lists a season you already fully have in Plex.
@@ -184,7 +209,7 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
       lastWatchedAt: ms != null ? new Date(ms) : null,
       missingSeasons,
     };
-    return { row, inPlexLeft: unwatchedInPlexCount(eps, watched, presentIds, today) };
+    return { row, inPlexLeft: unwatchedInPlexCount(eps, watched, presentIds, today, completeSeasons) };
   };
 
   const notNull = <T>(x: T | null): x is T => x != null;

@@ -2,6 +2,7 @@ import { type CastMember, parseCast } from "@/lib/cast";
 import { displayMonthYear, isoDate, monthYearISO, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured, type SeasonPlexSource } from "@/lib/plex";
+import { isWaitForFullSeasonEnabled } from "@/lib/settings";
 import {
   compareEpisodes,
   computeShowProgress,
@@ -71,13 +72,14 @@ function latestWatchedAt(seen: { watchedAt: Date | null }[]): Date | null {
 
 export async function getFollowedShows(userId: string, today: string = todayISO()): Promise<ShowSummary[]> {
   const prisma = getPrisma();
-  const [states, seenByItem, plexShows] = await Promise.all([
+  const [states, seenByItem, plexShows, waitForFullSeason] = await Promise.all([
     prisma.userMediaState.findMany({
       where: { userId, mediaItem: { is: { mediaType: "tv" } } },
       include: { mediaItem: { include: { episodes: { select: EPISODE_SELECT } } } },
     }),
     seenEpisodesByItem(userId),
     isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
+    isWaitForFullSeasonEnabled(),
   ]);
 
   return states
@@ -88,6 +90,7 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         seenEvents: seen,
         airingStatus: st.mediaItem.status,
         todayISO: today,
+        waitForFullSeason,
       });
       const group = displayGroup(st.wantToWatch, progress);
       const nextUpTitle = progress.nextUp
@@ -221,7 +224,7 @@ export async function getShowDetail(
   if (!item) return null;
   const showId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
-  const [state, seen, plexPresence] = await Promise.all([
+  const [state, seen, plexPresence, waitForFullSeason] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: showId } } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: showId, episodeId: { not: null } },
@@ -230,6 +233,7 @@ export async function getShowDetail(
     isPlexConfigured()
       ? getShowPlexPresence(userId, showId)
       : Promise.resolve({ seasons: new Set<number>(), sources: new Map<number, SeasonPlexSource>(), ratingKey: null }),
+    isWaitForFullSeasonEnabled(),
   ]);
   const watched = watchedEpisodeIds(seen);
   // Most recent dated watch per episode (a rewatch adds another SeenEvent); undated watches contribute nothing.
@@ -244,6 +248,7 @@ export async function getShowDetail(
     seenEvents: seen,
     airingStatus: item.status,
     todayISO: today,
+    waitForFullSeason,
   });
 
   const episodesBySeason = new Map<number, ShowDetailEpisode[]>();

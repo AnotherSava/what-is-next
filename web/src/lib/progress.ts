@@ -61,17 +61,44 @@ export function compareEpisodes(a: ProgressEpisode, b: ProgressEpisode): number 
   return a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber;
 }
 
+// Season numbers whose every non-special episode has already aired — the "complete" seasons. A season with any
+// non-special episode still to air (a future or undated release date) is left out; a season with no non-special
+// episodes at all never qualifies. Backs the "wait for the full season to air" preference: only complete seasons
+// make a show behind or surface it for download, so a still-airing season is held back until it finishes.
+export function fullyAiredSeasons(episodes: ProgressEpisode[], todayISO: string): Set<number> {
+  const total = new Map<number, number>();
+  const aired = new Map<number, number>();
+  for (const e of episodes) {
+    if (e.isSpecial) continue;
+    total.set(e.seasonNumber, (total.get(e.seasonNumber) ?? 0) + 1);
+    if (hasAired(e.releaseDate, todayISO)) aired.set(e.seasonNumber, (aired.get(e.seasonNumber) ?? 0) + 1);
+  }
+  const complete = new Set<number>();
+  for (const [season, count] of total) if ((aired.get(season) ?? 0) === count) complete.add(season);
+  return complete;
+}
+
 export interface ComputeShowProgressInput {
   episodes: ProgressEpisode[];
   seenEvents: ProgressSeenEvent[];
   airingStatus: string | null;
   todayISO: string; // "YYYY-MM-DD" — caller computes it in the display timezone
+  // "Wait for the full season to air" preference (settings:waitForFullSeason): when true, an aired-unwatched
+  // episode in a season that's still airing doesn't count toward "behind" — you're deliberately waiting for the
+  // season to finish. Ended shows are exempt (nothing more will air). Off/undefined restores the plain rule.
+  waitForFullSeason?: boolean;
 }
 
 export function computeShowProgress(input: ComputeShowProgressInput): ShowProgress {
   const { episodes, seenEvents, airingStatus, todayISO } = input;
   const watched = watchedEpisodeIds(seenEvents);
   const counted = episodes.filter((e) => !e.isSpecial);
+
+  // When the preference is on (and the show hasn't ended), only fully-aired seasons can make you behind — an
+  // aired-unwatched episode of a still-airing season is skipped, so the show stays up to date until that season
+  // finishes. `null` = no gating (preference off, or an ended show where waiting is meaningless).
+  const completeSeasons =
+    input.waitForFullSeason && !isEndedStatus(airingStatus) ? fullyAiredSeasons(counted, todayISO) : null;
 
   let airedCount = 0;
   let watchedAiredCount = 0;
@@ -80,7 +107,7 @@ export function computeShowProgress(input: ComputeShowProgressInput): ShowProgre
     if (!hasAired(ep.releaseDate, todayISO)) continue;
     airedCount++;
     if (watched.has(ep.id)) watchedAiredCount++;
-    else airedUnwatched.push(ep);
+    else if (!completeSeasons || completeSeasons.has(ep.seasonNumber)) airedUnwatched.push(ep);
   }
 
   const unwatchedAiredCount = airedUnwatched.length;

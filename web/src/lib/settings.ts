@@ -86,6 +86,10 @@ const plexUnaccountedSchema = z.object({
 // comes from the Plex sync, and the owner opts in to manual toggles from the admin page.
 const manualWatchedSchema = z.object({ enabled: z.boolean() });
 
+// User-facing app setting: hold a show out of Behind and the Download view until the season it's waiting on has
+// fully aired, so a season is only surfaced once every episode is out. On by default (see isWaitForFullSeasonEnabled).
+const waitForFullSeasonSchema = z.object({ enabled: z.boolean() });
+
 // Owner-configured download-source links for the Download view (torrent/tracker searches). Each source's URL —
 // domain, path, params — lives here, in runtime config, not the repo, so no download-source details are ever
 // committed. A source targets movie cards, show cards, or both; its template carries a {query} placeholder
@@ -138,6 +142,7 @@ const SETTING_SCHEMAS = {
   "plex:sourceCursor": plexSourceCursorSchema,
   "plex:server": plexServerSchema,
   "settings:manualWatched": manualWatchedSchema,
+  "settings:waitForFullSeason": waitForFullSeasonSchema,
   "settings:downloadSources": downloadSourcesSchema,
 } as const;
 
@@ -158,6 +163,12 @@ export async function setSetting<K extends SettingKey>(key: K, value: SettingVal
 // Whether the manual "mark watched" controls are shown in the UI. Off unless the owner has enabled it.
 export async function isManualWatchedEnabled(): Promise<boolean> {
   return (await getSetting("settings:manualWatched"))?.enabled ?? false;
+}
+
+// Whether a still-airing season is held back until every episode has aired before it makes a show Behind or lists
+// it in the Download view. On by default — the owner turns it off to be surfaced episodes as soon as they air.
+export async function isWaitForFullSeasonEnabled(): Promise<boolean> {
+  return (await getSetting("settings:waitForFullSeason"))?.enabled ?? true;
 }
 
 // The Plex server's machineIdentifier, or null until a sync has recorded it — needed to build watch deep links.

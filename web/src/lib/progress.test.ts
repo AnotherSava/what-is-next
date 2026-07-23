@@ -3,6 +3,7 @@ import {
   compareEpisodes,
   computeShowProgress,
   displayGroup,
+  fullyAiredSeasons,
   hasAired,
   isEndedStatus,
   watchedEpisodeIds,
@@ -64,6 +65,29 @@ describe("compareEpisodes", () => {
     expect(compareEpisodes(ep("x", 1, 2), ep("y", 1, 3))).toBeLessThan(0);
     expect(compareEpisodes(ep("x", 2, 1), ep("y", 1, 9))).toBeGreaterThan(0);
     expect(compareEpisodes(ep("x", 1, 1), ep("y", 1, 1))).toBe(0);
+  });
+});
+
+describe("fullyAiredSeasons", () => {
+  it("includes seasons whose every non-special episode has aired, excludes the rest", () => {
+    const episodes = [
+      ep("s1e1", 1, 1), // aired
+      ep("s1e2", 1, 2), // aired → season 1 complete
+      ep("s2e1", 2, 1, { releaseDate: "2026-06-01" }), // aired
+      ep("s2e2", 2, 2, { releaseDate: "2099-01-01" }), // future → season 2 incomplete
+      ep("s3e1", 3, 1, { releaseDate: null }), // undated → season 3 incomplete
+    ];
+    expect([...fullyAiredSeasons(episodes, TODAY)].sort()).toEqual([1]);
+  });
+
+  it("ignores specials when judging completeness", () => {
+    // A dateless special sits in season 0; season 1's only counted episode has aired, so season 1 is complete.
+    const episodes = [ep("s1e1", 1, 1), ep("special", 0, 1, { isSpecial: true, releaseDate: "2099-01-01" })];
+    expect([...fullyAiredSeasons(episodes, TODAY)]).toEqual([1]);
+  });
+
+  it("is empty for a show with no aired episodes", () => {
+    expect(fullyAiredSeasons([ep("s1e1", 1, 1, { releaseDate: "2099-01-01" })], TODAY).size).toBe(0);
   });
 });
 
@@ -175,6 +199,55 @@ describe("computeShowProgress — next up", () => {
       unwatchedAiredCount: 0,
       nextUp: null,
     });
+  });
+});
+
+describe("computeShowProgress — wait for the full season", () => {
+  // Season 1 complete; season 2 airing (E1 out, E2 still to come) with an aired-unwatched E1.
+  const airing = [
+    ep("s1e1", 1, 1),
+    ep("s1e2", 1, 2),
+    ep("s2e1", 2, 1, { releaseDate: "2026-06-01" }),
+    ep("s2e2", 2, 2, { releaseDate: "2099-01-01" }),
+  ];
+
+  it("stays up to date when the only behind season is still airing", () => {
+    const base = { episodes: airing, seenEvents: seen("s1e1", "s1e2"), airingStatus: "Returning Series", todayISO: TODAY };
+    expect(computeShowProgress(base).status).toBe("behind"); // default rule: behind on S2E1
+    const gated = computeShowProgress({ ...base, waitForFullSeason: true });
+    expect(gated.status).toBe("up-to-date");
+    expect(gated.unwatchedAiredCount).toBe(0);
+    expect(gated.nextUp).toBeNull();
+    expect(gated.airedCount).toBe(3); // raw aired count is unchanged (S1E1, S1E2, S2E1)
+  });
+
+  it("stays behind on a completed earlier season but ignores the still-airing one", () => {
+    const gated = computeShowProgress({
+      episodes: airing,
+      seenEvents: seen("s1e1"), // S1E2 unwatched (complete season) + S2E1 unwatched (airing season)
+      airingStatus: "Returning Series",
+      todayISO: TODAY,
+      waitForFullSeason: true,
+    });
+    expect(gated.status).toBe("behind");
+    expect(gated.unwatchedAiredCount).toBe(1); // only S1E2 counts; S2E1 is waited on
+    expect(gated.nextUp?.id).toBe("s1e2");
+  });
+
+  it("does not hold back an ended show (nothing more will air)", () => {
+    // Ended show with a dateless trailing entry — the preference must not drop it from Behind.
+    const episodes = [ep("s1e1", 1, 1), ep("s1e2", 1, 2), ep("s1e3", 1, 3, { releaseDate: null })];
+    const gated = computeShowProgress({ episodes, seenEvents: seen("s1e1"), airingStatus: "Ended", todayISO: TODAY, waitForFullSeason: true });
+    expect(gated.status).toBe("behind");
+    expect(gated.nextUp?.id).toBe("s1e2");
+  });
+
+  it("has no effect once the behind season has fully aired", () => {
+    const episodes = [ep("s1e1", 1, 1), ep("s1e2", 1, 2)]; // both aired
+    const gated = computeShowProgress({ episodes, seenEvents: seen("s1e1"), airingStatus: "Returning Series", todayISO: TODAY, waitForFullSeason: true });
+    expect(gated.status).toBe("behind");
+    expect(gated.unwatchedAiredCount).toBe(1);
+    expect(gated.nextUp?.id).toBe("s1e2");
   });
 });
 

@@ -41,6 +41,14 @@ describe("missingFromPlex", () => {
     const missing = missingFromPlex(eps, new Set(), new Set(["e1", "e2"]), today);
     expect(missing.map((m) => m.id)).toEqual(["e3"]);
   });
+
+  it("restricts to complete seasons when given a completeSeasons set (wait for the full season)", () => {
+    // Season 1 complete, season 2 still airing → only season 1's missing episode is offered.
+    const eps = [ep("s1e1", 1, 1, "2026-01-01"), ep("s2e1", 2, 1, "2026-06-01")];
+    expect(missingFromPlex(eps, new Set(), new Set(), today, new Set([1])).map((m) => m.id)).toEqual(["s1e1"]);
+    // An empty complete-season set (no season fully aired yet) means nothing is downloadable.
+    expect(missingFromPlex(eps, new Set(), new Set(), today, new Set())).toEqual([]);
+  });
 });
 
 describe("unwatchedInPlexCount", () => {
@@ -68,6 +76,12 @@ describe("unwatchedInPlexCount", () => {
   it("excludes specials and not-yet-aired episodes", () => {
     const eps = [ep("special", 0, 1, "2026-01-01", true), ep("future", 1, 1, "2999-01-01")];
     expect(unwatchedInPlexCount(eps, new Set(), new Set(["special", "future"]), today)).toBe(0);
+  });
+
+  it("counts only complete seasons when given a completeSeasons set", () => {
+    // Both in Plex + unwatched, but season 2 is still airing → only season 1's episode counts as watchable now.
+    const eps = [ep("s1e1", 1, 1, "2026-01-01"), ep("s2e1", 2, 1, "2026-06-01")];
+    expect(unwatchedInPlexCount(eps, new Set(), new Set(["s1e1", "s2e1"]), today, new Set([1]))).toBe(1);
   });
 });
 

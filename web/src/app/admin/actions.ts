@@ -34,6 +34,16 @@ export async function setManualWatched(enabled: boolean): Promise<void> {
   for (const p of ["/admin", "/", "/shows", "/movies"]) revalidatePath(p);
 }
 
+// Toggle whether a still-airing season is held back until every episode has aired before a show counts as Behind
+// or appears in the Download view.
+export async function setWaitForFullSeason(enabled: boolean): Promise<void> {
+  await requireOwner();
+  await setSetting("settings:waitForFullSeason", { enabled });
+  // The grouping (Behind), the home dashboard, the Download view, and the show detail page all re-derive from it.
+  for (const p of ["/admin", "/", "/shows", "/download"]) revalidatePath(p);
+  revalidatePath("/shows/[slug]", "page");
+}
+
 // Replace the Download view's list of download-source links. Stored in the DB, not the repo, so the sources stay
 // out of version control. Blank rows (no template) are dropped and text is trimmed; the Download page re-reads the
 // list to render each card's chips.

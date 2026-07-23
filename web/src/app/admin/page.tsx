@@ -8,10 +8,10 @@ import { getSessionUser } from "@/lib/session";
 import { plexSyncSummary } from "@/lib/plex";
 import type { RefreshError } from "@/lib/refresh";
 import { refreshSummary } from "@/lib/refreshSummary";
-import { getDownloadSources, getSetting, isManualWatchedEnabled } from "@/lib/settings";
+import { getDownloadSources, getSetting, isManualWatchedEnabled, isWaitForFullSeasonEnabled } from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
-import { addSelectedPlexItems } from "./actions";
-import { BackupNowButton, ManualWatchedToggle, RefreshNowButton } from "./_components/AdminButtons";
+import { addSelectedPlexItems, setManualWatched, setWaitForFullSeason } from "./actions";
+import { BackupNowButton, RefreshNowButton, SettingToggle } from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
 import { FreshnessBadge } from "./_components/FreshnessBadge";
 import { RunResult, StatRows } from "./_components/RunResult";
@@ -127,17 +127,27 @@ export default async function AdminPage() {
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const plexOn = isPlexConfigured();
-  const [refresh, backup, plexSync, plexCandidates, plexUnaccounted, tvdbStubs, manualWatched, downloadSources] =
-    await Promise.all([
-      getSetting("refresh:lastRun"),
-      getSetting("backup:lastRun"),
-      plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
-      plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
-      plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
-      getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
-      isManualWatchedEnabled(),
-      getDownloadSources(),
-    ]);
+  const [
+    refresh,
+    backup,
+    plexSync,
+    plexCandidates,
+    plexUnaccounted,
+    tvdbStubs,
+    manualWatched,
+    waitForFullSeason,
+    downloadSources,
+  ] = await Promise.all([
+    getSetting("refresh:lastRun"),
+    getSetting("backup:lastRun"),
+    plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
+    plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
+    plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
+    getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
+    isManualWatchedEnabled(),
+    isWaitForFullSeasonEnabled(),
+    getDownloadSources(),
+  ]);
   const stale = (iso: string): boolean => nowMs - new Date(iso).getTime() > FRESH_WINDOW_MS;
 
   // ── Refresh (incl. TVDB-fallback completeness) ────────────────────────────
@@ -363,10 +373,23 @@ export default async function AdminPage() {
         <h2 className="font-display text-[16px] font-semibold">Settings</h2>
 
         <div className="mt-[14px]">
-          <ManualWatchedToggle enabled={manualWatched} />
+          <SettingToggle enabled={manualWatched} label="Enable manual watched toggle" action={setManualWatched} />
           <p className={`mt-1.5 ${DESC_CLASS}`}>
             Off by default — watch state comes from the Plex sync. Turn on to show manual mark-watched controls on the
             home, show, and movie pages.
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <SettingToggle
+            enabled={waitForFullSeason}
+            label="Wait for the full season to air"
+            action={setWaitForFullSeason}
+          />
+          <p className={`mt-1.5 ${DESC_CLASS}`}>
+            On by default — a show whose current season is still airing stays Up to date, and out of the Download view,
+            until that season has fully aired, so you pick up a season only once it&rsquo;s complete. Turn off to be
+            surfaced episodes as soon as they air. Shows that have already ended aren&rsquo;t affected.
           </p>
         </div>
 

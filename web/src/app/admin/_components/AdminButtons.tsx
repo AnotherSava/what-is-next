@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
 import type { RefreshProgress, RefreshResult } from "@/lib/refresh";
-import { backupNow, setManualWatched } from "../actions";
+import { backupNow } from "../actions";
 import { JOB_BUTTON_CLASS, JOB_BUTTON_STYLE } from "./buttonStyle";
 import { FreshnessBadge } from "./FreshnessBadge";
 
@@ -143,9 +143,18 @@ function activePhase(p: RefreshProgress): string {
   return `Shows ${p.tvTotal}/${p.tvTotal}`;
 }
 
-// Owner toggle for the manual "mark watched" controls, styled as the design reference's pill switch. Local state
-// gives instant feedback; the server action persists the flag and revalidates the surfaces that render the controls.
-export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
+// A reusable owner setting switch, styled as the design reference's pill toggle. Local state gives instant
+// feedback; `action` (a server action, passed in from the server-rendered page) persists the flag and revalidates
+// the surfaces that depend on it. Shared by every boolean app setting so they can't drift in look or behaviour.
+export function SettingToggle({
+  enabled,
+  label,
+  action,
+}: {
+  enabled: boolean;
+  label: string;
+  action: (next: boolean) => Promise<void>;
+}) {
   const [checked, setChecked] = useState(enabled);
   const [pending, start] = useTransition();
   return (
@@ -157,7 +166,7 @@ export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
       onClick={() => {
         const next = !checked;
         setChecked(next);
-        start(() => setManualWatched(next));
+        start(() => action(next));
       }}
       className="flex cursor-pointer items-center gap-[11px] text-sm disabled:opacity-50"
     >
@@ -170,7 +179,7 @@ export function ManualWatchedToggle({ enabled }: { enabled: boolean }) {
           style={{ left: checked ? "16px" : "2px" }}
         />
       </span>
-      <span>Enable manual watched toggle</span>
+      <span>{label}</span>
     </button>
   );
 }
