@@ -74,6 +74,34 @@ describe("TmdbClient", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("builds the /search/person URL and parses the person results", async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return jsonResponse({
+        page: 1,
+        total_results: 1,
+        total_pages: 1,
+        results: [
+          {
+            id: 5064,
+            name: "Greta Gerwig",
+            profile_path: "/g.jpg",
+            known_for_department: "Directing",
+            known_for: [{ media_type: "movie", title: "Barbie" }],
+          },
+        ],
+      });
+    });
+    const client = makeClient(fetchImpl as unknown as typeof fetch);
+    const res = await client.searchPerson("gerwig");
+    expect(calls[0]).toContain("/search/person?");
+    expect(calls[0]).toContain("query=gerwig");
+    expect(calls[0]).toContain("include_adult=false");
+    expect(res.results[0].name).toBe("Greta Gerwig");
+    expect(res.results[0].known_for_department).toBe("Directing");
+  });
+
   it("de-dupes concurrent identical requests into a single fetch", async () => {
     let n = 0;
     const fetchImpl = vi.fn(async () => {

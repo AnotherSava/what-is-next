@@ -1,83 +1,88 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Poster } from "@/app/_components/Poster";
+import { PageTitle } from "@/app/_components/cardUi";
+import { getPrisma } from "@/lib/db";
+import { searchCatalog, tmdbErrorMessage, type SearchOutcome, type SearchScope } from "@/lib/search";
 import { getSessionUser } from "@/lib/session";
-import { searchTitles, type SearchResult } from "@/lib/search";
-import { TmdbError } from "@/lib/tmdb";
-import { AddButton } from "./_components/AddButton";
+import { getTmdb } from "@/lib/tmdb";
+import { PersonCard } from "./_components/PersonCard";
+import { SearchCard } from "./_components/SearchCard";
+import { SearchControls } from "./_components/SearchControls";
 
 export const metadata: Metadata = { title: "Search" };
 
-export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+const SCOPES: SearchScope[] = ["movie", "show", "person"];
+const asScope = (v: string | undefined): SearchScope => (SCOPES.includes(v as SearchScope) ? (v as SearchScope) : "movie");
+
+// A search param may arrive repeated (?q=a&q=b → string[]); collapse to the first value before use.
+const first = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
+
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[]; scope?: string | string[] }>;
+}) {
   // Search-to-add is an owner-only affordance (brief §8.5) — viewers are bounced.
   const sessionUser = await getSessionUser();
   if (!sessionUser || sessionUser.role !== "owner") redirect("/");
 
-  const { q } = await searchParams;
-  const query = (q ?? "").trim();
+  const { q, scope: scopeParam } = await searchParams;
+  const scope = asScope(first(scopeParam));
+  const query = (first(q) ?? "").trim();
 
-  let results: SearchResult[] = [];
+  let outcome: SearchOutcome | null = null;
   let error: string | null = null;
   if (query) {
     try {
-      results = await searchTitles(query, sessionUser.id);
+      // getTmdb is passed as a factory (not a client) so a missing-token construction failure is caught inside
+      // searchCatalog alongside fetch errors — the tracked-library results still come back for movie/show scopes.
+      outcome = await searchCatalog(getPrisma(), getTmdb, { query, scope, userId: sessionUser.id });
+      error = outcome.error;
     } catch (e) {
-      const authProblem =
-        (e instanceof TmdbError && (e.status === 401 || e.status === 403)) ||
-        (e instanceof Error && e.message.includes("TMDB_API_TOKEN"));
-      error = authProblem ? "TMDB API token is missing or invalid — set TMDB_API_TOKEN." : "Search failed. Try again.";
+      error = tmdbErrorMessage(e);
     }
   }
 
+  const hasResults = outcome
+    ? outcome.scope === "person"
+      ? outcome.people.length > 0
+      : outcome.results.length > 0
+    : false;
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+    <div>
+      <PageTitle>Search</PageTitle>
+      <div className="mt-5">
+        <SearchControls scope={scope} query={query} />
+      </div>
 
-      <form action="/search" method="get" className="flex gap-2">
-        <input
-          name="q"
-          defaultValue={query}
-          autoFocus
-          placeholder="Search TV shows and movies…"
-          className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
-        />
-        <button
-          type="submit"
-          className="rounded-md bg-[var(--color-accent-strong)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent)]"
-        >
-          Search
-        </button>
-      </form>
-
-      {error && <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
-
-      {query && !error && results.length === 0 && (
-        <p className="text-[var(--color-muted)]">No results for “{query}”.</p>
+      {!query && (
+        <p className="py-[30px] text-center text-sm text-[var(--color-faint)]">
+          Enter a keyword to search your library and the wider catalog.
+        </p>
       )}
 
-      <ul className="space-y-2">
-        {results.map((r) => (
-          <li
-            key={`${r.mediaType}-${r.tmdbId}`}
-            className="flex gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
-          >
-            <Poster path={r.posterPath} alt={r.title} width={56} height={84} size="w185" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex items-baseline gap-2">
-                <span className="truncate font-medium">{r.title}</span>
-                {r.year && <span className="text-xs text-[var(--color-muted)]">{r.year}</span>}
-                <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
-                  {r.mediaType === "tv" ? "TV" : "Movie"}
-                </span>
-              </div>
-              {r.overview && <p className="line-clamp-2 text-xs text-[var(--color-muted)]">{r.overview}</p>}
-              <div className="mt-auto pt-1">
-                <AddButton result={r} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {error && <p className="mb-[18px] text-[13px] text-[#e0808a]">{error}</p>}
+
+      {outcome && outcome.scope !== "person" && outcome.results.length > 0 && (
+        <div className="wn-grid">
+          {outcome.results.map((r) => (
+            <SearchCard key={r.key} result={r} />
+          ))}
+        </div>
+      )}
+
+      {outcome && outcome.scope === "person" && outcome.people.length > 0 && (
+        <div className="wn-grid">
+          {outcome.people.map((p) => (
+            <PersonCard key={p.key} person={p} />
+          ))}
+        </div>
+      )}
+
+      {outcome && !error && !hasResults && (
+        <p className="py-[8px] text-sm text-[var(--color-faint)]">No results found.</p>
+      )}
     </div>
   );
 }

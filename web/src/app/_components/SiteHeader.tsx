@@ -7,8 +7,9 @@ import { SyncPill } from "./FreshnessDot";
 
 // Top navigation (design reference). Left: the brand mark (home) + a divider + the content destinations. Right: the
 // poster-grid density slider, the Plex "Synced" pill, and a gear that opens Settings (Admin). Matches the reference
-// chrome exactly — Lists and Search are reachable by URL but no longer sit in the nav. Owner-only destinations
-// (Download) and the gear/Synced controls appear only for the owner; the routes are still guarded server-side.
+// chrome — Lists is reachable by URL but not in the nav; Search sits at the end as an owner-only destination.
+// Owner-only destinations (Download, Search) and the gear/Synced controls appear only for the owner; the routes are
+// still guarded server-side.
 export function SiteHeader({
   isOwner,
   freshness,
@@ -20,8 +21,9 @@ export function SiteHeader({
     { href: "/shows", label: "Shows" },
     { href: "/movies", label: "Movies" },
     { href: "/recent", label: "Recent" },
-    // Download surfaces what to acquire for your own Plex library — an owner utility, not viewer content.
-    ...(isOwner ? [{ href: "/download", label: "Download" }] : []),
+    // Download surfaces what to acquire for your own Plex library, and Search adds new titles — both owner utilities,
+    // not viewer content.
+    ...(isOwner ? [{ href: "/download", label: "Download" }, { href: "/search", label: "Search" }] : []),
   ];
   return (
     <header

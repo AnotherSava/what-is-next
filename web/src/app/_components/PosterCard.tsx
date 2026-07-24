@@ -1,11 +1,11 @@
 "use client";
 
 import { type ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { toggleMovieFavorite } from "@/app/movies/actions";
 import { toggleFavorite as toggleShowFavorite } from "@/app/shows/actions";
-import { posterUrl } from "@/lib/images";
+import { CardShell } from "./CardShell";
+import { PosterImage } from "./PosterImage";
 import { RatingBadge } from "./cardUi";
 import { useFavoriteToggle } from "./useFavoriteToggle";
 
@@ -46,12 +46,9 @@ export function PosterCard({
   const showPlay = !showDlMenu && !!watchUrl;
 
   return (
-    <div
-      className="wn-posterwrap wn-card relative overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]"
-      style={{ boxShadow: "0 16px 38px -22px rgba(0,0,0,0.85)" }}
-    >
+    <CardShell>
       <div className="wn-postermedia relative aspect-[2/3] overflow-hidden">
-        <CardPoster path={posterPath} alt={title} />
+        <PosterImage path={posterPath} alt={title} />
 
         {/* Click target covering the poster: opens Plex when playable, else navigates to the detail page. It sits
             below the chips/heart/menu (z-1) so those stay clickable. */}
@@ -109,28 +106,7 @@ export function PosterCard({
       <Link href={detailHref} className="block cursor-default px-[13px] pt-3 pb-[13px]">
         {children}
       </Link>
-    </div>
-  );
-}
-
-function CardPoster({ path, alt }: { path: string | null; alt: string }) {
-  const url = posterUrl(path, "w342");
-  if (!url) {
-    return (
-      <div className="wn-poster absolute inset-0 flex items-center justify-center bg-[var(--color-surface-2)] p-3 text-center text-[11px] leading-tight text-[var(--color-muted)]">
-        {alt}
-      </div>
-    );
-  }
-  return (
-    <Image
-      src={url}
-      alt={alt}
-      fill
-      sizes="(max-width: 768px) 45vw, 240px"
-      className="wn-poster object-cover"
-      loading="lazy"
-    />
+    </CardShell>
   );
 }
 

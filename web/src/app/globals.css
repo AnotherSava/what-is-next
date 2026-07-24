@@ -495,3 +495,40 @@ details[open] > summary .wn-disc-expanded {
 .wn-zoom:hover .wn-zoom-trigger {
   stroke: var(--color-text);
 }
+
+/* Search box magnifier "scanning" jiggle — plays while a search submit is in flight (SearchControls). Ported from
+   the design reference's .wn-scan. */
+@keyframes wn-scan {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(2.6px, -1.7px);
+  }
+  40% {
+    transform: translate(2px, 2.1px);
+  }
+  60% {
+    transform: translate(-2px, 2px);
+  }
+  80% {
+    transform: translate(-2.3px, -1.8px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+.wn-scan {
+  animation: wn-scan 1.05s ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
+/* Search result "add" (+) corner — brightens slightly on hover (SearchCard AddMark). */
+.wn-addmark {
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+}
+.wn-addmark:hover:not(:disabled) {
+  transform: scale(1.12);
+}

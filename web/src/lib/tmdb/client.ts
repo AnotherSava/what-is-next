@@ -3,6 +3,7 @@ import {
   tmdbFindSchema,
   tmdbMovieDetailSchema,
   tmdbMovieSearchSchema,
+  tmdbPersonSearchSchema,
   tmdbSeasonDetailSchema,
   tmdbTvDetailSchema,
   tmdbTvSearchSchema,
@@ -84,6 +85,9 @@ export class TmdbClient {
   }
   searchMovie(query: string, page = 1) {
     return this.request(`/search/movie`, { query, page, include_adult: "false" }, tmdbMovieSearchSchema);
+  }
+  searchPerson(query: string, page = 1) {
+    return this.request(`/search/person`, { query, page, include_adult: "false" }, tmdbPersonSearchSchema);
   }
 
   // ── core ───────────────────────────────────────────────────────────────

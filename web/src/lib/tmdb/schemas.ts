@@ -155,3 +155,27 @@ export const tmdbMovieSearchSchema = z.object({
   total_pages: z.number().int(),
   results: z.array(tmdbMovieSummarySchema),
 });
+
+// A person result as it appears in /search/person. `known_for` mixes movie + tv summaries; we read just enough
+// to label the search card (department + a couple of known-for titles). No birth year here — that needs a detail
+// call, so the card's year corner stays empty.
+export const tmdbPersonSummarySchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  original_name: z.string().nullish(),
+  profile_path: z.string().nullish(),
+  known_for_department: z.string().nullish(),
+  popularity: z.number().nullish(),
+  known_for: z
+    .array(z.object({ media_type: z.string().nullish(), title: z.string().nullish(), name: z.string().nullish() }))
+    .nullish(),
+});
+export type TmdbPersonSummary = z.infer<typeof tmdbPersonSummarySchema>;
+
+// GET /3/search/person
+export const tmdbPersonSearchSchema = z.object({
+  page: z.number().int(),
+  total_results: z.number().int(),
+  total_pages: z.number().int(),
+  results: z.array(tmdbPersonSummarySchema),
+});
