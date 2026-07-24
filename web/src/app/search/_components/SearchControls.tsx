@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { SearchScope } from "@/lib/search";
 
@@ -21,11 +21,17 @@ const PLACEHOLDER: Record<SearchScope, string> = {
   person: "Actor, director or creator name…",
 };
 
+// Per-tab memory of the last committed search, so returning to a bare /search — the nav "Search" link carries no
+// query — restores the previous query + results instead of an empty page. sessionStorage: scoped to the tab session,
+// cleared on close; the query already lives in the URL for back/forward navigation.
+const STORAGE_KEY = "wn:search";
+
 export function SearchControls({ scope, query }: { scope: SearchScope; query: string }) {
   const router = useRouter();
   const [text, setText] = useState(query);
   const [committedQuery, setCommittedQuery] = useState(query);
   const [pending, start] = useTransition();
+  const restoreChecked = useRef(false);
 
   // Resync the box to the committed URL query (submit, the nav "Search" link, browser back/forward). Done during
   // render — React's recommended "adjust state when a prop changes" pattern — so it keeps focus/cursor (no remount)
@@ -35,10 +41,43 @@ export function SearchControls({ scope, query }: { scope: SearchScope; query: st
     setText(query);
   }
 
+  // Remember the current search whenever the page has a query (however we arrived — submit, direct URL, restore) so
+  // it survives leaving and coming back to Search.
+  useEffect(() => {
+    if (!query) return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ q: query, scope }));
+    } catch {}
+  }, [query, scope]);
+
+  // On the first mount with no query — i.e. we landed on a bare /search (the nav "Search" link) — restore the last
+  // remembered search. Runs once; a deliberate empty search (handled in `run`) forgets it so this won't re-fill.
+  useEffect(() => {
+    if (restoreChecked.current) return;
+    restoreChecked.current = true;
+    if (query) return; // arrived with a query — nothing to restore
+    let saved: { q?: string; scope?: SearchScope } | null = null;
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      saved = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (saved?.q) {
+      const params = new URLSearchParams({ scope: saved.scope ?? "movie", q: saved.q });
+      router.replace(`/search?${params.toString()}`);
+    }
+  }, [query, router]);
+
   const run = (nextScope: SearchScope, nextText: string) => {
     const params = new URLSearchParams({ scope: nextScope });
     const q = nextText.trim();
-    if (q) params.set("q", q);
+    if (q) {
+      params.set("q", q);
+    } else {
+      // A deliberate empty search forgets the remembered one, so returning to Search stays empty as intended.
+      try {
+        sessionStorage.removeItem(STORAGE_KEY);
+      } catch {}
+    }
     start(() => router.push(`/search?${params.toString()}`));
   };
 

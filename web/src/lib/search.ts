@@ -3,8 +3,9 @@ import { TmdbError, type TmdbClient, type TmdbPersonSummary } from "@/lib/tmdb";
 
 // Backend for the redesigned Search page (design reference "Search" screen). One owner tool that, for a given
 // scope, searches BOTH the user's tracked library and the wider TMDB catalog:
-//   • movie / show → title results annotated with library status (favourite ♥ / in-library ✓ / add +); library
-//     rows come first, external rows are deduped against them.
+//   • movie / show → the TMDB hits in relevance order, each annotated with its library status IN PLACE (favourite ♥
+//     / in-library ✓ / add +), preceded by any tracked items TMDB didn't surface. A hit isn't deduped out or floated
+//     to a separate section when it's in the library, so adding it just flips its + → ✓ where it sits.
 //   • person       → display-only people cards (photo, name, role) straight from TMDB /search/person.
 // External catalog failures are non-fatal for movie/show: the library results still return, with `error` set so
 // the page can surface the problem. Deps (prisma, tmdb) are injected, mirroring lib/catalog.ts, so it's unit-testable.
@@ -23,7 +24,7 @@ export interface TitleResult {
   overview: string | null; // synopsis — the movie card's one-line summary (full text on hover); null when unknown
   inLibrary: boolean;
   isFavorite: boolean;
-  detailHref: string | null; // library rows link to their detail page; external rows aren't linkable until added
+  detailHref: string | null; // library rows → their detail page; external rows → a read-only /…/preview/<tmdbId> card
 }
 
 // A person hit — display only (people aren't tracked, so the card is inert).
@@ -100,9 +101,9 @@ export async function searchCatalog(
   const detailBase = scope === "movie" ? "/movies" : "/shows";
   const needle = q.toLowerCase();
 
-  // 1) The user's tracked library, matched by a case-insensitive title substring. Filtered in memory (not via a
-  //    Prisma `contains`/SQL LIKE) so `%`/`_` in the query stay literal and non-ASCII case-folds correctly — the
-  //    library is the user's own tracked set, small enough to scan here. These rows come first in the grid.
+  // The user's tracked library for this media type, matched by a case-insensitive title substring. Filtered in
+  // memory (not via a Prisma `contains`/SQL LIKE) so `%`/`_` in the query stay literal and non-ASCII case-folds
+  // correctly — the library is the user's own tracked set, small enough to scan here.
   const tracked = await prisma.mediaItem.findMany({
     where: { mediaType, userState: { some: { userId } } },
     select: {
@@ -120,7 +121,20 @@ export async function searchCatalog(
   });
   const rows = tracked.filter((r) => r.title.toLowerCase().includes(needle)).slice(0, LIBRARY_LIMIT);
 
-  const libraryResults: TitleResult[] = rows.map((r) => ({
+  // Index the tracked rows so a TMDB hit can be annotated with its library status — and linked to its real detail
+  // page — IN PLACE, rather than deduped out and floated to a separate "library" section. Keeping an added item in
+  // its search-result position (just flipping + → ✓) is what lets its card stay put across an add and a round-trip
+  // to its detail page, instead of jumping to the front. A row WITH a tmdb id is matched by id ALONE; title matching
+  // is a fallback ONLY for rows that lack a tmdb id (e.g. TVDB-sourced) — otherwise a different movie that merely
+  // shares a title would be mistaken for a tracked one (the "Odyssey" bug: adding one flagged every same-titled hit).
+  const trackedByTmdbId = new Map<number, (typeof rows)[number]>();
+  const trackedByTitleNoId = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    if (r.tmdbId != null) trackedByTmdbId.set(r.tmdbId, r);
+    else trackedByTitleNoId.set(r.title.toLowerCase(), r);
+  }
+
+  const toLibraryResult = (r: (typeof rows)[number]): TitleResult => ({
     key: `lib-${r.id}`,
     tmdbId: r.tmdbId,
     mediaType,
@@ -132,56 +146,52 @@ export async function searchCatalog(
     inLibrary: true,
     isFavorite: r.userState[0]?.isFavorite ?? false,
     detailHref: `${detailBase}/${r.slug ?? r.id}`,
-  }));
+  });
 
-  // 2) The wider TMDB catalog, minus anything already in the library (deduped by tmdb id, then by title).
-  const seenIds = new Set(rows.map((r) => r.tmdbId).filter((id): id is number => id != null));
-  const seenTitles = new Set(rows.map((r) => r.title.toLowerCase()));
-
-  let externalResults: TitleResult[] = [];
+  // Fetch the wider TMDB catalog and normalise the movie/tv result shapes into one. A TMDB failure is non-fatal:
+  // the tracked-library rows still return below, with `error` set for the page to surface.
+  type Hit = { id: number; title: string; date: string | null; poster: string | null; vote: number | null; overview: string | null };
   let error: string | null = null;
+  let hits: Hit[] = [];
   try {
     const tmdb = getTmdbClient();
     if (scope === "movie") {
       const res = await tmdb.searchMovie(q);
-      externalResults = res.results
-        .filter((r) => !seenIds.has(r.id) && !seenTitles.has(r.title.toLowerCase()))
-        .slice(0, EXTERNAL_LIMIT)
-        .map((r) => ({
-          key: `ext-movie-${r.id}`,
-          tmdbId: r.id,
-          mediaType: "movie" as const,
-          title: r.title,
-          posterPath: r.poster_path ?? null,
-          rating: r.vote_average || null,
-          year: yearOf(r.release_date),
-          overview: r.overview ?? null,
-          inLibrary: false,
-          isFavorite: false,
-          detailHref: null,
-        }));
+      hits = res.results.map((r) => ({ id: r.id, title: r.title, date: r.release_date ?? null, poster: r.poster_path ?? null, vote: r.vote_average ?? null, overview: r.overview ?? null }));
     } else {
       const res = await tmdb.searchTv(q);
-      externalResults = res.results
-        .filter((r) => !seenIds.has(r.id) && !seenTitles.has(r.name.toLowerCase()))
-        .slice(0, EXTERNAL_LIMIT)
-        .map((r) => ({
-          key: `ext-tv-${r.id}`,
-          tmdbId: r.id,
-          mediaType: "tv" as const,
-          title: r.name,
-          posterPath: r.poster_path ?? null,
-          rating: r.vote_average || null,
-          year: yearOf(r.first_air_date),
-          overview: r.overview ?? null,
-          inLibrary: false,
-          isFavorite: false,
-          detailHref: null,
-        }));
+      hits = res.results.map((r) => ({ id: r.id, title: r.name, date: r.first_air_date ?? null, poster: r.poster_path ?? null, vote: r.vote_average ?? null, overview: r.overview ?? null }));
     }
   } catch (e) {
     error = tmdbErrorMessage(e);
   }
 
-  return { scope, results: [...libraryResults, ...externalResults], error };
+  // Each TMDB hit, annotated with its library status in place. A tracked hit shows ✓/♥ and links to its real detail
+  // page; an untracked one shows + and links to the read-only preview. Tracked rows surfaced here are recorded so
+  // they aren't listed again below.
+  const surfaced = new Set<string>();
+  const externalResults: TitleResult[] = hits.slice(0, EXTERNAL_LIMIT).map((h) => {
+    const lib = trackedByTmdbId.get(h.id) ?? trackedByTitleNoId.get(h.title.toLowerCase());
+    if (lib) surfaced.add(lib.id);
+    return {
+      key: `ext-${mediaType}-${h.id}`,
+      tmdbId: h.id,
+      mediaType,
+      title: h.title,
+      posterPath: h.poster,
+      // Library rows prefer the IMDb score (like the /movies|/shows cards), falling back to TMDB's while it hydrates.
+      rating: lib ? (lib.imdbRating ?? (h.vote || null)) : (h.vote || null),
+      year: yearOf(h.date),
+      overview: h.overview ?? lib?.overview ?? null,
+      inLibrary: lib != null,
+      isFavorite: lib?.userState[0]?.isFavorite ?? false,
+      detailHref: lib ? `${detailBase}/${lib.slug ?? lib.id}` : `${detailBase}/preview/${h.id}`,
+    };
+  });
+
+  // Tracked matches TMDB search didn't surface (a TVDB-sourced item, or a title ranked out of the top hits). Shown
+  // first so your own library still leads; anything already shown inline above is excluded so nothing repeats.
+  const libraryOnly = rows.filter((r) => !surfaced.has(r.id)).map(toLibraryResult);
+
+  return { scope, results: [...libraryOnly, ...externalResults], error };
 }

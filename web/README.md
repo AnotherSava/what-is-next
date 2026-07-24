@@ -6,7 +6,7 @@ A personal, self-hosted tracker for TV series and movies — what I've watched, 
 - **Download** view: what to grab that isn't in Plex yet — released watchlist movies you don't own, and behind/not-started shows with aired episodes missing (shows grouped into "Get back", "More of", and "Not started"). Each card links out to your configured search sources (e.g. a torrent tracker) for that title.
 - **Shows** grouped Behind / Up to date / Planned / Finished / Stopped, with per-episode checklists.
 - **Movies** watched + watchlist, mark-watched with a date.
-- **Search** TMDB and add titles; details hydrate in the background.
+- **Search** TMDB and add titles; preview a result's full details (cast, seasons) before adding, and details hydrate in the background after.
 - **Ratings & director** on movie and show cards: an IMDb rating (★, via OMDb) and the director.
 - **Lists** for manual curation.
 - **Plex** library sync: badges the shows/seasons you have in Plex, an "In Plex" filter, continuous import of your Plex watch history, and a review-then-add flow for Plex-only titles. In-app "unwatch" is durable — a later sync won't re-add it. While you browse, watch state auto-refreshes from Plex, and a **Synced** pill in the nav shows how current it is.

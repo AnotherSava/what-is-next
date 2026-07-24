@@ -2,20 +2,34 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { AddMark } from "@/app/_components/AddMark";
 import { CardShell } from "@/app/_components/CardShell";
 import { PosterImage } from "@/app/_components/PosterImage";
 import { CardTitle, RatingBadge } from "@/app/_components/cardUi";
 import type { TitleResult } from "@/lib/search";
 import { addTitle } from "../actions";
 
+// Items added to the library during THIS session, remembered in module memory. It survives client-side navigation
+// (going to an item's page and back, or revisiting Search) but clears on a full page reload. Why it's needed: a
+// history-POP back-navigation restores /search from the browser's Router Cache — which keeps the page state we
+// *want* (same query, results, scroll), but predates the add, so it re-renders the item as "not in library". The
+// ✓ was optimistic-only React state that resets on remount; consulting this set on mount keeps it. On a real reload
+// the dynamic server render (straight from the DB) is authoritative and shows ✓ on its own. Keyed `mediaType:tmdbId`.
+const addedThisSession = new Set<string>();
+
 // A movie/show search result card (design reference "Search" screen). The frame + text body match the poster-grid
 // PosterCard, but the top-right corner shows a *status* instead of a favourite toggle:
 //   • in library + favourited → ♥ (amber, display only)
 //   • in library              → ✓ (green, display only)
-//   • not in library          → + (adds it: creates the tracked stub, then flips to ✓)
-// Library cards link to their detail page; external cards aren't linkable (nothing to open until they're added).
+//   • not in library          → + (two-step: click arms it, click again adds — creates the tracked stub, then flips to ✓)
+// Every card links to a detail view — library cards to their real page, external cards to a read-only TMDB
+// preview (/movies|/shows/preview/<tmdbId>). The + still adds in place: it stops propagation, so a poster/body
+// click opens the preview while the + button itself only tracks the item.
 export function SearchCard({ result }: { result: TitleResult }) {
-  const [added, setAdded] = useState(false);
+  const sessionKey = result.tmdbId != null ? `${result.mediaType}:${result.tmdbId}` : null;
+  // Initialise from module memory so a card added earlier this session still reads as in-library after a back-nav
+  // remount (see addedThisSession above). result.inLibrary already covers items the fresh server render knows about.
+  const [added, setAdded] = useState(() => sessionKey != null && addedThisSession.has(sessionKey));
   const [pending, start] = useTransition();
   const inLibrary = result.inLibrary || added;
 
@@ -28,6 +42,7 @@ export function SearchCard({ result }: { result: TitleResult }) {
         title: result.title,
         posterPath: result.posterPath,
       });
+      if (sessionKey) addedThisSession.add(sessionKey);
       setAdded(true);
     });
 
@@ -35,7 +50,7 @@ export function SearchCard({ result }: { result: TitleResult }) {
     <div className="wn-postermedia relative aspect-[2/3] overflow-hidden">
       <PosterImage path={result.posterPath} alt={result.title} />
 
-      {/* Library rows: the whole poster navigates to the detail page (sits below the chips/status corner). */}
+      {/* The whole poster navigates — library → detail page, external → preview (sits below the status corner). */}
       {result.detailHref && (
         <Link href={result.detailHref} aria-label={result.title} className="absolute inset-0 z-[1]" />
       )}
@@ -51,7 +66,7 @@ export function SearchCard({ result }: { result: TitleResult }) {
           <LibraryMark />
         )
       ) : (
-        <AddMark pending={pending} onAdd={onAdd} />
+        <AddMark pending={pending} onConfirm={onAdd} />
       )}
     </div>
   );
@@ -110,25 +125,3 @@ function LibraryMark() {
   );
 }
 
-// White plus — not in your library; adds it (start tracking).
-function AddMark({ pending, onAdd }: { pending: boolean; onAdd: () => void }) {
-  return (
-    <button
-      type="button"
-      title="Add to your library"
-      aria-label="Add to your library"
-      disabled={pending}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onAdd();
-      }}
-      className="wn-addmark absolute top-[8px] right-[8px] z-[3] cursor-pointer leading-none disabled:opacity-60"
-      style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.6)) drop-shadow(0 2px 5px rgba(0,0,0,0.4))" }}
-    >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 5 v14 M5 12 h14" />
-      </svg>
-    </button>
-  );
-}

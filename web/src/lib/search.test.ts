@@ -89,7 +89,7 @@ describe("searchCatalog", () => {
     return item;
   }
 
-  it("returns tracked library movies first (flagged), then external hits deduped against them", async () => {
+  it("annotates a tracked hit in place (flagged) and links it to its detail page", async () => {
     await seedTracked({
       title: "The Matrix",
       mediaType: "movie",
@@ -123,12 +123,58 @@ describe("searchCatalog", () => {
       overview: "A hacker discovers reality is a simulation.",
     });
     expect(out.results[0].detailHref).toContain("/movies/");
+    expect(out.results[0].detailHref).not.toContain("preview"); // links to the real page, not the preview
     expect(out.results[1]).toMatchObject({
       inLibrary: false,
       isFavorite: false,
-      detailHref: null,
+      detailHref: "/movies/preview/604", // untracked hit → read-only TMDB preview
       overview: "Neo fights to save Zion.",
     });
+  });
+
+  it("keeps a tracked hit in its TMDB position (not floated to the front) and links to the real page", async () => {
+    // Matrix Reloaded is tracked but TMDB ranks it SECOND — it must stay second, flagged ✓, not jump to the front.
+    await seedTracked({ title: "The Matrix Reloaded", mediaType: "movie", tmdbId: 604, imdbRating: 7.2 });
+    const tmdb = fakeTmdb({
+      async searchMovie() {
+        return {
+          page: 1,
+          total_results: 2,
+          total_pages: 1,
+          results: [
+            { id: 603, title: "The Matrix", release_date: "1999-03-31", poster_path: "/m.jpg", vote_average: 8.2 },
+            { id: 604, title: "The Matrix Reloaded", release_date: "2003-05-15", poster_path: "/r.jpg", vote_average: 7 },
+          ],
+        };
+      },
+    });
+    const out = await searchCatalog(db.prisma, () => tmdb, { query: "matrix", scope: "movie", userId: "u1" });
+    if (out.scope === "person") throw new Error("unexpected person scope");
+    expect(out.results.map((r) => r.title)).toEqual(["The Matrix", "The Matrix Reloaded"]);
+    expect(out.results[0]).toMatchObject({ inLibrary: false, detailHref: "/movies/preview/603" }); // untracked #1
+    expect(out.results[1]).toMatchObject({ inLibrary: true, rating: 7.2 }); // tracked #2, still at index 1
+    expect(out.results[1].detailHref).toContain("/movies/");
+    expect(out.results[1].detailHref).not.toContain("preview");
+  });
+
+  it("does NOT flag a different same-titled movie as in-library (a tmdb-id row matches by id only)", async () => {
+    // Tracked "Odyssey" #100; TMDB returns a DIFFERENT "Odyssey" (#200). #200 must stay + (not in library), and the
+    // tracked one still shows once (library-only, since TMDB didn't surface #100) — no false flag, no duplicate.
+    await seedTracked({ title: "Odyssey", mediaType: "movie", tmdbId: 100 });
+    const tmdb = fakeTmdb({
+      async searchMovie() {
+        return {
+          page: 1,
+          total_results: 1,
+          total_pages: 1,
+          results: [{ id: 200, title: "Odyssey", release_date: "2026-07-01", poster_path: "/o2.jpg", vote_average: 6 }],
+        };
+      },
+    });
+    const out = await searchCatalog(db.prisma, () => tmdb, { query: "odyssey", scope: "movie", userId: "u1" });
+    if (out.scope === "person") throw new Error("unexpected person scope");
+    expect(out.results.find((r) => r.tmdbId === 200)).toMatchObject({ inLibrary: false, detailHref: "/movies/preview/200" });
+    expect(out.results.filter((r) => r.title === "Odyssey" && r.inLibrary)).toHaveLength(1); // the tracked one, shown once
   });
 
   it("only matches titles the user actually tracks", async () => {
@@ -195,7 +241,7 @@ describe("searchCatalog", () => {
     expect(out.results.map((r) => r.title)).toEqual(["Inception"]);
   });
 
-  it("dedupes an external hit against a library row that has no tmdbId, by title", async () => {
+  it("marks a tracked (no-tmdbId) library row's external hit in place, by title", async () => {
     await seedTracked({ title: "Solaris", mediaType: "movie" }); // no tmdbId (e.g. TVDB-sourced)
     const tmdb = fakeTmdb({
       async searchMovie() {
@@ -209,8 +255,10 @@ describe("searchCatalog", () => {
     });
     const out = await searchCatalog(db.prisma, () => tmdb, { query: "solaris", scope: "movie", userId: "u1" });
     if (out.scope === "person") throw new Error("unexpected person scope");
-    expect(out.results.map((r) => r.title)).toEqual(["Solaris"]); // external dup dropped by title (library has no id)
+    expect(out.results.map((r) => r.title)).toEqual(["Solaris"]); // shown once — the TMDB hit matched to the library row by title
     expect(out.results[0].inLibrary).toBe(true);
+    expect(out.results[0].detailHref).toContain("/movies/"); // links to the tracked row's real page, not the preview
+    expect(out.results[0].detailHref).not.toContain("preview");
   });
 
   it("returns empty for a blank query without building the TMDB client", async () => {
