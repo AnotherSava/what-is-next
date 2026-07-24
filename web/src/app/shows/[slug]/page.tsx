@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/app/_components/BackLink";
+import { HeroSpecRow } from "@/app/_components/HeroSpecRow";
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { downloadLinksFor } from "@/lib/downloadSources";
@@ -167,17 +168,6 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
         />
         <CastColumn cast={show.cast} />
       </div>
-    </div>
-  );
-}
-
-// A label/value row in the show hero's identity block (matches the movie hero's Director/Stars rows): a fixed-width
-// faint label + a wider Archivo Narrow value.
-function HeroSpecRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-3.5">
-      <span className="font-num w-[74px] shrink-0 text-[12px] tracking-[0.02em] text-[var(--color-faint)]">{label}</span>
-      <span className="font-narrow min-w-0 flex-1 text-[15px] text-[#d3d3da]">{value}</span>
     </div>
   );
 }

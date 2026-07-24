@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/app/_components/BackLink";
+import { HeroSpecRow } from "@/app/_components/HeroSpecRow";
 import { TopCast } from "@/app/_components/TopCast";
 import { MovieHeroMenu } from "@/app/movies/_components/MovieHeroActions";
 import { MovieHeroPoster } from "@/app/movies/_components/MovieHeroPoster";
@@ -95,14 +96,14 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
             {(movie.director || stars || hasSource) && (
               <div className="mt-[18px] flex max-w-[600px] flex-col gap-2">
-                {movie.director && <SpecRow label="Director" value={movie.director} />}
-                {stars && <SpecRow label="Stars" value={stars} />}
+                {movie.director && <HeroSpecRow label="Director" value={movie.director} />}
+                {stars && <HeroSpecRow label="Stars" value={stars} />}
                 {hasSource && (
                   <>
                     {(movie.director || stars) && <div className="my-[5px] h-px bg-[#1c1c22]" />}
-                    {video && <SpecRow label="Video" value={video} muted />}
-                    {audio.text && <SpecRow label="Audio" value={audio.text} more={audio.more} muted />}
-                    {subtitles.text && <SpecRow label="Subtitles" value={subtitles.text} more={subtitles.more} muted />}
+                    {video && <HeroSpecRow label="Video" value={video} muted />}
+                    {audio.text && <HeroSpecRow label="Audio" value={audio.text} more={audio.more} muted />}
+                    {subtitles.text && <HeroSpecRow label="Subtitles" value={subtitles.text} more={subtitles.more} muted />}
                   </>
                 )}
               </div>
@@ -114,20 +115,6 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
       </div>
 
       <TopCast cast={movie.cast} limit={8} />
-    </div>
-  );
-}
-
-// A label/value row in the hero's identity block (design 2a/2b/2c): a fixed-width faint label + a wider value.
-// `muted` dims the value (the Video/Audio/Subtitles source rows); `more` appends a dim "+N more" overflow tail.
-function SpecRow({ label, value, more = 0, muted = false }: { label: string; value: string; more?: number; muted?: boolean }) {
-  return (
-    <div className="flex items-baseline gap-3.5">
-      <span className="font-num w-[74px] shrink-0 text-[12px] tracking-[0.02em] text-[var(--color-faint)]">{label}</span>
-      <span className={`font-narrow min-w-0 flex-1 ${muted ? "text-[14px] text-[#9a9aa4]" : "text-[15px] text-[#d3d3da]"}`}>
-        {value}
-        {more > 0 && <span className="text-[#6f6f78]">{value ? " · " : ""}+{more} more</span>}
-      </span>
     </div>
   );
 }
