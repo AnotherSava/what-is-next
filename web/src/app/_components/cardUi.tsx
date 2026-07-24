@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { TruncatedTitle } from "./TruncatedTitle";
 
 // Presentational building blocks shared by every poster-grid view (design reference), so headings and card text
-// read identically wherever they appear and can't drift between pages. Plain markup — safe to import from both
-// server and client components.
+// read identically wherever they appear and can't drift between pages. Safe to import from both server and client
+// components — CardTitle renders the client TruncatedTitle as a child, which server callers can still do.
 
 // Page heading — the big title at the top of Shows / Movies / Recent / Download / Settings / Credits.
 export function PageTitle({ children }: { children: ReactNode }) {
@@ -48,7 +49,7 @@ export function RatingBadge({ value, className = "" }: { value: number; classNam
 export function CardTitle({ title, aside, asideTitle }: { title: string; aside?: ReactNode; asideTitle?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="wn-titlelink font-display truncate text-[15px] font-bold">{title}</span>
+      <TruncatedTitle text={title} className="wn-titlelink font-display truncate text-[15px] font-bold" />
       {aside != null && aside !== "" && (
         <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]" title={asideTitle}>{aside}</span>
       )}
