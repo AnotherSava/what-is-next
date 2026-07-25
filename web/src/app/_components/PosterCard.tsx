@@ -103,7 +103,7 @@ export function PosterCard({
 
       {/* The text body always links to the detail page — the poster may instead play in Plex, so this keeps the
           show/movie page (seasons, tracking, favouriting) reachable from every card. */}
-      <Link href={detailHref} className="block cursor-default px-[13px] pt-3 pb-[13px]">
+      <Link href={detailHref} className="wn-ct-body block cursor-default">
         {children}
       </Link>
     </CardShell>

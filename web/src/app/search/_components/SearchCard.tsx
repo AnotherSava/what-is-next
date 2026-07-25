@@ -76,7 +76,7 @@ export function SearchCard({ result }: { result: TitleResult }) {
       <CardTitle title={result.title} aside={result.year} />
       {result.mediaType === "movie" && result.overview && (
         // One-line synopsis, ellipsized; the native title tooltip reveals the full text on hover.
-        <p title={result.overview} className="mt-[3px] truncate text-[12.5px] text-[var(--color-muted)]">
+        <p title={result.overview} className="wn-ct-over mt-[3px] truncate text-[var(--color-muted)]">
           {result.overview}
         </p>
       )}
@@ -87,11 +87,11 @@ export function SearchCard({ result }: { result: TitleResult }) {
     <CardShell>
       {media}
       {result.detailHref ? (
-        <Link href={result.detailHref} className="block cursor-pointer px-[13px] pt-3 pb-[13px]">
+        <Link href={result.detailHref} className="wn-ct-body block cursor-pointer">
           {body}
         </Link>
       ) : (
-        <div className="px-[13px] pt-3 pb-[13px]">{body}</div>
+        <div className="wn-ct-body">{body}</div>
       )}
     </CardShell>
   );

@@ -44,14 +44,15 @@ export function RatingBadge({ value, className = "" }: { value: number; classNam
   );
 }
 
-// The card's title row: bold title (truncates) with an optional muted aside pinned right (a year, "N ago", …).
-// `asideTitle` is the aside's hover tooltip — e.g. the exact last-watched date behind a relative "3mo ago".
+// The card's title row: bold title clamped to two lines (the row reserves a fixed two-line height via
+// .wn-ct-titlerow, so every card stays the same size) with an optional muted aside pinned right (a year, "N ago", …),
+// vertically centred to the title. `asideTitle` is the aside's hover tooltip — e.g. the exact last-watched date.
 export function CardTitle({ title, aside, asideTitle }: { title: string; aside?: ReactNode; asideTitle?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <TruncatedTitle text={title} className="wn-titlelink font-display truncate text-[15px] font-bold" />
+    <div className="wn-ct-titlerow flex items-center gap-2">
+      <TruncatedTitle text={title} className="wn-titlelink wn-ct-title min-w-0 flex-1" />
       {aside != null && aside !== "" && (
-        <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]" title={asideTitle}>{aside}</span>
+        <span className="wn-ct-aside shrink-0 font-num tabular-nums text-[var(--color-faint)]" title={asideTitle}>{aside}</span>
       )}
     </div>
   );
@@ -69,11 +70,11 @@ export function CardMetaRow({
 }) {
   return (
     <div className="mt-[3px] flex items-baseline justify-between gap-2">
-      <span className="font-narrow min-w-0 truncate text-[13px]" style={{ color: leftColor }}>
+      <span className="wn-ct-meta font-narrow min-w-0 truncate" style={{ color: leftColor }}>
         {left}
       </span>
       {right != null && right !== "" && (
-        <span className="shrink-0 font-num text-[11px] tabular-nums text-[var(--color-faint)]">{right}</span>
+        <span className="wn-ct-sub shrink-0 font-num tabular-nums text-[var(--color-faint)]">{right}</span>
       )}
     </div>
   );

@@ -26,7 +26,7 @@ export function GridDensityProvider({ initialCols, children }: { initialCols: nu
 
   return (
     <GridDensityContext.Provider value={{ cols, setCols }}>
-      <div className="flex min-h-dvh flex-col" style={{ ["--wn-cols" as string]: String(cols) }}>
+      <div className="flex min-h-dvh flex-col" data-cols={cols} style={{ ["--wn-cols" as string]: String(cols) }}>
         {children}
       </div>
     </GridDensityContext.Provider>

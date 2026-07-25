@@ -91,6 +91,107 @@ input::placeholder {
   display: grid;
   grid-template-columns: repeat(var(--wn-cols, 5), minmax(0, 1fr));
   gap: 18px;
+
+  /* Per-density card-text type scale. The density wrapper carries data-cols=3..8; each step below overrides these,
+     shrinking the title (and meta/padding) as cards narrow. The title keeps the regular display face at every
+     density — more legible than a condensed one at small sizes — and long titles wrap to a second line rather than
+     needing a narrower face to fit. Base values here are the 5-column defaults, and double as the out-of-grid fallback. */
+  --wn-ct-title-size: 13px;
+  --wn-ct-aside-size: 11px;
+  --wn-ct-meta-size: 13px;
+  --wn-ct-sub-size: 11px;
+  --wn-ct-over-size: 12.5px;
+  --wn-ct-pad-x: 7px;
+  --wn-ct-pad-y: 6px;
+}
+
+/* The lookup table, one row per density setting. Wide steps grow the type so big cards don't fit far more letters;
+   dense steps shrink it. All steps use the regular display face; length is handled by the two-line wrap, not a
+   condensed face. data-cols sits on an ancestor of .wn-grid, so these set the vars on the grid and every card below
+   inherits them. cols=5 uses the base above. */
+[data-cols="3"] .wn-grid {
+  --wn-ct-title-size: 24px;
+  --wn-ct-aside-size: 13px;
+  --wn-ct-meta-size: 16px;
+  --wn-ct-sub-size: 13px;
+  --wn-ct-over-size: 14px;
+  --wn-ct-pad-x: 9px;
+  --wn-ct-pad-y: 8px;
+}
+[data-cols="4"] .wn-grid {
+  --wn-ct-title-size: 17px;
+  --wn-ct-aside-size: 12px;
+  --wn-ct-meta-size: 14px;
+  --wn-ct-sub-size: 12px;
+  --wn-ct-over-size: 13px;
+  --wn-ct-pad-x: 8px;
+  --wn-ct-pad-y: 7px;
+}
+[data-cols="6"] .wn-grid {
+  --wn-ct-title-size: 12px;
+  --wn-ct-aside-size: 10.5px;
+  --wn-ct-meta-size: 12px;
+  --wn-ct-sub-size: 10.5px;
+  --wn-ct-over-size: 12px;
+  --wn-ct-pad-x: 6px;
+  --wn-ct-pad-y: 5px;
+}
+[data-cols="7"] .wn-grid {
+  --wn-ct-title-size: 10px;
+  --wn-ct-aside-size: 10px;
+  --wn-ct-meta-size: 11px;
+  --wn-ct-sub-size: 10px;
+  --wn-ct-over-size: 11px;
+  --wn-ct-pad-x: 5px;
+  --wn-ct-pad-y: 4px;
+}
+[data-cols="8"] .wn-grid {
+  --wn-ct-title-size: 8px;
+  --wn-ct-aside-size: 9.5px;
+  --wn-ct-meta-size: 10px;
+  --wn-ct-sub-size: 9.5px;
+  --wn-ct-over-size: 10.5px;
+  --wn-ct-pad-x: 5px;
+  --wn-ct-pad-y: 4px;
+}
+
+/* Card-text elements bound to the scale above. Fallbacks = the 5-column defaults, so a card that ever renders
+   outside a density-scoped grid still looks right. Applied by CardTitle / CardMetaRow / CardNextRow / SearchCard. */
+/* The title row reserves a fixed two-line height (2 lines × 1.2 line-height, expressed in title-size units) and
+   centres its children, so every card is exactly the same height AND the title and the year share one vertical
+   middle whether the title is one line or two — flexbox centring, reliable where -webkit-box-pack is not. */
+.wn-ct-titlerow {
+  min-height: calc(2.4 * var(--wn-ct-title-size, 15px));
+}
+.wn-ct-title {
+  font-family: var(--font-display);
+  font-size: var(--wn-ct-title-size, 15px);
+  font-weight: 700;
+  /* A long title wraps to a second line then ellipsizes; a short one stays a single line. Height and vertical
+     centring live on the row (.wn-ct-titlerow above), so the title is centred to match the year beside it. */
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.wn-ct-aside {
+  font-size: var(--wn-ct-aside-size, 11px);
+}
+.wn-ct-meta {
+  font-size: var(--wn-ct-meta-size, 13px);
+}
+.wn-ct-sub {
+  font-size: var(--wn-ct-sub-size, 11px);
+}
+.wn-ct-over {
+  font-size: var(--wn-ct-over-size, 12.5px);
+}
+/* Card body padding, scaled with density (base = 5-column values, and the out-of-grid fallback) so the frame
+   around the text tightens as cards shrink instead of leaving small type swimming in fixed padding. */
+.wn-ct-body {
+  padding: var(--wn-ct-pad-y, 12px) var(--wn-ct-pad-x, 13px);
 }
 
 .wn-card {

@@ -41,11 +41,11 @@ export function CardNextRow({
   return (
     <div ref={rowRef} className="relative mt-[3px] flex items-baseline justify-between gap-2">
       <span ref={leftRef} className="min-w-0 truncate">
-        <span className="font-num text-[11px] tabular-nums text-[var(--color-behind)]">{code}</span>
-        {epTitle && <span className="font-narrow ml-[9px] text-[13px] text-[var(--color-bright)]">{epTitle}</span>}
+        <span className="wn-ct-sub font-num tabular-nums text-[var(--color-behind)]">{code}</span>
+        {epTitle && <span className="wn-ct-meta font-narrow ml-[9px] text-[var(--color-bright)]">{epTitle}</span>}
       </span>
       {hasMore && (
-        <span className="shrink-0 whitespace-nowrap font-num text-[11px] tabular-nums text-[var(--color-faint)]">
+        <span className="wn-ct-sub shrink-0 whitespace-nowrap font-num tabular-nums text-[var(--color-faint)]">
           +{moreCount}
           {!tight && " more"}
         </span>
@@ -54,7 +54,7 @@ export function CardNextRow({
         <span
           ref={probeRef}
           aria-hidden
-          className="pointer-events-none invisible absolute whitespace-nowrap font-num text-[11px] tabular-nums"
+          className="wn-ct-sub pointer-events-none invisible absolute whitespace-nowrap font-num tabular-nums"
         >
           +{moreCount} more
         </span>

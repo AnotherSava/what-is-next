@@ -11,10 +11,10 @@ export function PersonCard({ person }: { person: PersonResult }) {
       <div className="wn-postermedia relative aspect-[2/3] overflow-hidden">
         <PosterImage path={person.profilePath} alt={person.name} />
       </div>
-      <div className="px-[13px] pt-3 pb-[13px]">
+      <div className="wn-ct-body">
         <CardTitle title={person.name} />
         {person.role && (
-          <div className="font-narrow mt-[3px] truncate text-[13px] text-[var(--color-muted)]">{person.role}</div>
+          <div className="wn-ct-meta font-narrow mt-[3px] truncate text-[var(--color-muted)]">{person.role}</div>
         )}
       </div>
     </CardShell>
