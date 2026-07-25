@@ -7,7 +7,8 @@ import type { SearchScope } from "@/lib/search";
 // The Search page's controls (design reference "Search" screen): a Movie/Show/Person scope segmented control, a
 // search box, and a Search button. Client — it drives the URL (?scope=&q=) and the server component re-renders the
 // results. A scope click re-runs immediately (keeping the current text); Enter or the button submit the typed text;
-// Esc clears the box. While a submit is in flight the magnifier does the reference "scanning" jiggle (.wn-scan).
+// Esc resets the page — clears the box and drops any results (back to a bare /search). While a submit is in flight
+// the magnifier does the reference "scanning" jiggle (.wn-scan).
 
 const SCOPES: { key: SearchScope; label: string }[] = [
   { key: "movie", label: "Movie" },
@@ -67,16 +68,21 @@ export function SearchControls({ scope, query }: { scope: SearchScope; query: st
     }
   }, [query, router]);
 
+  // Forget the last remembered search so returning to a bare /search stays empty. Shared by a deliberate empty
+  // search and by Esc's page reset, so the two can't drift.
+  const forgetSaved = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  };
+
   const run = (nextScope: SearchScope, nextText: string) => {
     const params = new URLSearchParams({ scope: nextScope });
     const q = nextText.trim();
     if (q) {
       params.set("q", q);
     } else {
-      // A deliberate empty search forgets the remembered one, so returning to Search stays empty as intended.
-      try {
-        sessionStorage.removeItem(STORAGE_KEY);
-      } catch {}
+      forgetSaved(); // a deliberate empty search forgets the remembered one, so returning to Search stays empty
     }
     start(() => router.push(`/search?${params.toString()}`));
   };
@@ -126,9 +132,14 @@ export function SearchControls({ scope, query }: { scope: SearchScope; query: st
             if (e.key === "Enter") {
               e.preventDefault();
               run(scope, text);
-            } else if (e.key === "Escape" && text) {
+            } else if (e.key === "Escape" && (text || committedQuery)) {
+              // Esc resets the page to its pristine empty state: clear the box, forget the remembered search, and —
+              // when results are showing — drop them by navigating back to a bare /search. So nothing lingers below
+              // or on the next visit.
               e.preventDefault();
               setText("");
+              if (committedQuery) run(scope, ""); // navigates to bare /search; run("") also forgets the remembered search
+              else forgetSaved(); // no results to drop, but forget any stale remembered search from an earlier submit
             }
           }}
           autoFocus
