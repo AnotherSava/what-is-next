@@ -13,7 +13,7 @@ export function SearchBox({
   placeholder: string;
 }) {
   return (
-    <div className="flex w-[250px] items-center gap-[9px] rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
+    <div className="flex h-[38px] w-[250px] items-center gap-[9px] rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-3">
       <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--color-faint)" strokeWidth="1.7" aria-hidden>
         <circle cx="9" cy="9" r="6" />
         <path d="M17 17 l-4-4" />

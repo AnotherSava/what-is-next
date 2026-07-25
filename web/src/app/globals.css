@@ -284,8 +284,9 @@ input::placeholder {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  height: 38px; /* fixed so a chip lines up with the search box when they share a row (Movies header) */
   font-size: 12px;
-  padding: 7px 12px;
+  padding: 0 12px;
   border-radius: 9px;
   white-space: nowrap;
   cursor: pointer;
