@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { CardTitle, GroupHeading, PageTitle } from "@/app/_components/cardUi";
 import { CardNextRow } from "@/app/_components/CardNextRow";
-import { FilterChip, SearchBox } from "@/app/_components/Filters";
+import { SearchBox } from "@/app/_components/Filters";
 import { PosterCard } from "@/app/_components/PosterCard";
+import { ShowsWindowSelector } from "./ShowsWindowSelector";
 
 // A show as the Shows grid needs it — display strings precomputed on the server, plus the bits the card's poster
 // area needs (rating/heart/play). `group` drives the status filter and which shelf it lands in.
@@ -35,55 +36,39 @@ const GROUPS = [
 
 export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFavorite: boolean }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string>("all");
   const q = query.trim().toLowerCase();
 
+  // Every shelf renders stacked; search narrows the items and drops emptied shelves. There's no status filter — the
+  // header window selector navigates between shelves rather than filtering to one.
   const groupsView = useMemo(
     () =>
-      GROUPS.filter((g) => status === "all" || status === g.key)
-        .map((g) => ({
-          ...g,
-          items: shows.filter((s) => s.group === g.key && (!q || s.title.toLowerCase().includes(q))),
-        }))
-        .filter((g) => g.items.length > 0),
-    [shows, status, q],
+      GROUPS.map((g) => ({
+        ...g,
+        items: shows.filter((s) => s.group === g.key && (!q || s.title.toLowerCase().includes(q))),
+      })).filter((g) => g.items.length > 0),
+    [shows, q],
   );
   const empty = groupsView.length === 0;
 
-  const chips = [{ key: "all", label: "All", color: "#8b8b96", count: shows.length }].concat(
-    GROUPS.map((g) => ({
-      key: g.key,
-      label: g.label,
-      color: g.color,
-      count: shows.filter((s) => s.group === g.key).length,
-    })),
+  const windowGroups = useMemo(
+    () => groupsView.map((g) => ({ key: g.key, label: g.label, count: g.items.length })),
+    [groupsView],
   );
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between gap-4">
+      <ShowsWindowSelector groups={windowGroups} />
+
+      <div className="mb-7 flex items-center justify-between gap-4">
         <PageTitle>Shows</PageTitle>
         <SearchBox value={query} onChange={setQuery} placeholder="Search shows" />
-      </div>
-
-      <div className="mb-7 flex flex-wrap gap-2">
-        {chips.map((c) => (
-          <FilterChip
-            key={c.key}
-            active={status === c.key}
-            onClick={() => setStatus(c.key)}
-            color={c.color}
-            label={c.label}
-            count={c.count}
-          />
-        ))}
       </div>
 
       {empty ? (
         <div className="p-[60px] text-center text-sm text-[var(--color-faint)]">No shows match “{query}”.</div>
       ) : (
         groupsView.map((g) => (
-          <div key={g.key} className="mb-[34px]">
+          <div key={g.key} id={`shows-group-${g.key}`} className="mb-[34px]">
             <GroupHeading color={g.color} label={g.label} />
             <div className="wn-grid">
               {g.items.map((s) => (

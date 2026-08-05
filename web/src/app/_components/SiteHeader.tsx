@@ -34,6 +34,9 @@ export function SiteHeader({
         <BrandLink />
         <span className="mx-1.5 h-[18px] w-px bg-[var(--color-surface-2)]" />
         <NavLinks items={links} />
+        {/* Portal target for a page-specific header control. The Shows page mounts its sliding-window group selector
+            here; on every other page it's empty and collapses into the flexible space before the ml-auto group. */}
+        <span id="wn-header-slot" className="flex items-center" />
         <span className="ml-auto flex items-center gap-4">
           <GridDensitySlider />
           <span className="h-[18px] w-px bg-[var(--color-surface-2)]" />
