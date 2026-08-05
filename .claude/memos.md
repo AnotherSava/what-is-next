@@ -18,3 +18,4 @@ Off-task ideas captured during sessions, to revisit later. Managed by `/memo`; o
 - [ ] 2026-07-24 17:19 — improve actor search results order photoes first
 - [x] 2026-07-24 18:03 — movie sorting order selector
 - [ ] 2026-07-24 18:33 — add tracking for books and audio books
+- [ ] 2026-08-04 21:36 — treat seasons without original track or english subs as absent and needing download
