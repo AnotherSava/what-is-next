@@ -68,7 +68,7 @@ Media-server connections (URL, token, libraries, Jellyfin account) live in the *
 | `OMDB_API_KEY`          | no       | —                        | OMDb API key; adds the IMDb rating (★) shown on cards (hidden when unset)       |
 | `PUBLIC_ACCESS`         | no       | `readonly`               | `off` makes the whole site owner-only                                                            |
 | `REFRESH_CRON`          | no       | `0 11 * * *`             | nightly refresh + backup schedule (UTC)                                                          |
-| `TZ`                    | no       | host                     | timezone for "has it aired" / "this week"                                                        |
+| `TZ`                    | no       | host                     | display timezone: "has it aired" / "this week", every watched-date stamp, and the day a date you pick is stored as |
 | `PLEX_URL`              | no       | `http://localhost:32400` | seed only — Plex server base URL                                                                 |
 | `PLEX_TOKEN`            | no       | —                        | seed only — Plex `X-Plex-Token`; present at first run ⇒ Plex starts enabled                      |
 | `PLEX_LIBRARIES`        | no       | all TV+movie             | seed only — comma-separated Plex library titles to sync (e.g. `TV Shows,Movies`)                 |

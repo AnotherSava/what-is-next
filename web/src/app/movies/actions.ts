@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { parseWatchDate } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { clearMovieSuppression, suppressWatch } from "@/lib/media";
 import { requireOwner } from "@/lib/session";
@@ -29,7 +30,7 @@ export async function markMovieWatched(movieId: string, watchedAtISO?: string): 
   const prisma = getPrisma();
   const movie = await prisma.mediaItem.findFirst({ where: { id: movieId, mediaType: "movie" }, select: { id: true } });
   if (!movie) return;
-  const watchedAt = parseDate(watchedAtISO) ?? new Date();
+  const watchedAt = parseWatchDate(watchedAtISO) ?? new Date();
   const existing = await prisma.seenEvent.findFirst({
     where: { userId: owner.id, mediaItemId: movieId, episodeId: null },
     select: { id: true },
@@ -75,10 +76,4 @@ export async function toggleMovieFavorite(movieId: string): Promise<void> {
     update: { isFavorite: !current?.isFavorite },
   });
   revalidateMovies();
-}
-
-function parseDate(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { todayISO } from "@/lib/datetime";
+import { parseWatchDate, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { clearEpisodeSuppressions, suppressWatch } from "@/lib/media";
 import { hasAired } from "@/lib/progress";
@@ -36,7 +36,7 @@ export async function setEpisodeWatchedAt(episodeId: string, watchedAtISO: strin
   const prisma = getPrisma();
   const ep = await prisma.episode.findUnique({ where: { id: episodeId }, select: { mediaItemId: true } });
   if (!ep) return;
-  const watchedAt = parseDate(watchedAtISO) ?? new Date();
+  const watchedAt = parseWatchDate(watchedAtISO) ?? new Date();
   const existing = await prisma.seenEvent.findFirst({ where: { userId: owner.id, episodeId }, select: { id: true } });
   if (existing) await prisma.seenEvent.update({ where: { id: existing.id }, data: { watchedAt } });
   else
@@ -86,7 +86,7 @@ export async function setSeasonWatchedAt(showId: string, seasonNumber: number, w
   const owner = await requireOwner();
   const prisma = getPrisma();
   const today = todayISO();
-  const watchedAt = parseDate(watchedAtISO) ?? new Date();
+  const watchedAt = parseWatchDate(watchedAtISO) ?? new Date();
   const eps = await prisma.episode.findMany({
     where: { mediaItemId: showId, seasonNumber },
     select: { id: true, releaseDate: true },
@@ -211,12 +211,4 @@ async function createMissingSeen(userId: string, mediaItemId: string, episodeIds
     data: toCreate.map((episodeId) => ({ userId, mediaItemId, episodeId, watchedAt: now, source: "app" })),
   });
   await clearEpisodeSuppressions(prisma, userId, toCreate); // re-marking watched lifts any prior unmark overrides
-}
-
-// Parse an "YYYY-MM-DD" (or any Date-parseable) string to a Date, or null when absent/invalid — mirrors the movie
-// action so a bad date from the client never throws; callers fall back to `new Date()`.
-function parseDate(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
 }
