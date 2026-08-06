@@ -1,22 +1,36 @@
+import { Fragment } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { PageTitle } from "@/app/_components/cardUi";
 import { getPrisma } from "@/lib/db";
 import { plural } from "@/lib/format";
-import { isPlexConfigured } from "@/lib/plex";
+import {
+  getMediaServers,
+  isUsable,
+  MEDIA_PROVIDERS,
+  PROVIDER_LABEL,
+  syncSummary,
+  type MediaProvider,
+} from "@/lib/media";
 import { getSessionUser } from "@/lib/session";
-import { plexSyncSummary } from "@/lib/plex";
 import type { RefreshError } from "@/lib/refresh";
 import { refreshSummary } from "@/lib/refreshSummary";
-import { getDownloadSources, getSetting, isManualWatchedEnabled, isWaitForFullSeasonEnabled } from "@/lib/settings";
+import {
+  getDownloadSources,
+  getSetting,
+  isManualWatchedEnabled,
+  isWaitForFullSeasonEnabled,
+  SYNC_KEYS,
+} from "@/lib/settings";
 import { isTvdbConfigured } from "@/lib/tvdb";
-import { addSelectedPlexItems, setManualWatched, setWaitForFullSeason } from "./actions";
+import { addSelectedLibraryItems, setManualWatched, setWaitForFullSeason } from "./actions";
 import { BackupNowButton, RefreshNowButton, SettingToggle } from "./_components/AdminButtons";
 import { ACTION_BUTTON_CLASS } from "./_components/buttonStyle";
 import { FreshnessBadge } from "./_components/FreshnessBadge";
 import { RunResult, StatRows } from "./_components/RunResult";
 import { DownloadSourcesEditor } from "./_components/DownloadSources";
-import { SyncPlexButton } from "./_components/SyncButton";
+import { MediaServerForm } from "./_components/MediaServerForm";
+import { SyncServerButton } from "./_components/SyncButton";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -24,13 +38,27 @@ export const metadata: Metadata = { title: "Settings" };
 // couple hours of grace flags a genuinely missed run without false alarms from slight timing drift.
 const FRESH_WINDOW_MS = 26 * 60 * 60 * 1000;
 
-type JobState = "ok" | "warn" | "off"; // green / amber / grey (not configured)
+type JobState = "ok" | "warn"; // green / amber
 
-// One place both the status dot and the freshness badge read from, so a state's dot and text can't diverge.
+// The colour each state reads in. The freshness badge is the only thing that carries it — its wording and colour
+// together are the status, so the button doesn't repeat it as a dot. There's no "not configured" colour: a
+// server that's switched off has no card to colour (see the job grid).
 const STATE_COLOR: Record<JobState, string> = {
   ok: "var(--color-good)",
   warn: "var(--color-behind)",
-  off: "var(--color-muted)",
+};
+
+// Display order for the media servers — Jellyfin first, in both the job cards and the connection forms.
+// Deliberately separate from MEDIA_PROVIDERS, which stays the canonical order everything else reads from:
+// bookkeeping keys, and the play-link preference that sends a title held by both servers to Plex.
+const SERVER_DISPLAY_ORDER: MediaProvider[] = ["jellyfin", "plex"];
+
+// Columns for the job grid, keyed by how many cards it actually holds (Refresh + Backup + each connected
+// server). Written out rather than computed so Tailwind can see every class it has to generate.
+const JOB_GRID_COLS: Record<number, string> = {
+  2: "md:grid-cols-2",
+  3: "md:grid-cols-3",
+  4: "md:grid-cols-2 xl:grid-cols-4",
 };
 
 const CARD_CLASS = "rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]";
@@ -60,7 +88,7 @@ function splitPath(p: string): { folder: string; file: string } {
 // (muted label column, mono value) matching the design. The folder row is static (with the design's zebra stripe);
 // the whole file value is a download link that, like the reference's `.wn-icobtn`, highlights on hover (surface fill
 // + brighter text) and downloads the snapshot on click.
-function backupFileLines(filePath: string | null, prunedCount: number): React.ReactNode {
+function backupFileLines(filePath: string | null): React.ReactNode {
   const { folder, file } = splitPath(filePath ?? "");
   const downloadHref = `/api/admin/backup/download?file=${encodeURIComponent(file)}`;
   return (
@@ -108,9 +136,6 @@ function backupFileLines(filePath: string | null, prunedCount: number): React.Re
           </svg>
         </a>
       </div>
-      {prunedCount > 0 && (
-        <div className="mt-1 px-2 text-[11px] text-[var(--color-faint)]">pruned {prunedCount} old</div>
-      )}
     </div>
   );
 }
@@ -126,28 +151,23 @@ export default async function AdminPage() {
   // once per request and is never memoized, so reading the clock here is safe despite the purity lint.
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
-  const plexOn = isPlexConfigured();
-  const [
-    refresh,
-    backup,
-    plexSync,
-    plexCandidates,
-    plexUnaccounted,
-    tvdbStubs,
-    manualWatched,
-    waitForFullSeason,
-    downloadSources,
-  ] = await Promise.all([
-    getSetting("refresh:lastRun"),
-    getSetting("backup:lastRun"),
-    plexOn ? getSetting("plex:lastSync") : Promise.resolve(null),
-    plexOn ? getSetting("plex:candidates") : Promise.resolve(null),
-    plexOn ? getSetting("plex:unaccounted") : Promise.resolve(null),
-    getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
-    isManualWatchedEnabled(),
-    isWaitForFullSeasonEnabled(),
-    getDownloadSources(),
-  ]);
+  const servers = await getMediaServers();
+  const [refresh, backup, tvdbStubs, manualWatched, waitForFullSeason, downloadSources, ...serverRuns] =
+    await Promise.all([
+      getSetting("refresh:lastRun"),
+      getSetting("backup:lastRun"),
+      getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
+      isManualWatchedEnabled(),
+      isWaitForFullSeasonEnabled(),
+      getDownloadSources(),
+      // One bookkeeping bundle per provider, loaded whether or not it's connected — a card renders for each.
+      ...MEDIA_PROVIDERS.map(async (provider) => ({
+        provider,
+        lastSync: await getSetting(SYNC_KEYS[provider].lastSync),
+        candidates: await getSetting(SYNC_KEYS[provider].candidates),
+        unaccounted: await getSetting(SYNC_KEYS[provider].unaccounted),
+      })),
+    ]);
   const stale = (iso: string): boolean => nowMs - new Date(iso).getTime() > FRESH_WINDOW_MS;
 
   // ── Refresh (incl. TVDB-fallback completeness) ────────────────────────────
@@ -185,33 +205,41 @@ export default async function AdminPage() {
         : "These are titles TMDB can't resolve — set TVDB_API_KEY, then Refresh."
       : null;
 
-  // ── Plex sync ────────────────────────────────────────────────────────────
-  const candidates = plexCandidates?.items ?? [];
-  const unaccounted = plexUnaccounted?.items ?? [];
-  const candidateCount = candidates.length;
-  const unaccountedCount = unaccounted.length;
-  const plexState: JobState = !plexOn
-    ? "off"
-    : !plexSync
-      ? "warn"
-      : stale(plexSync.at) || candidateCount > 0 || unaccountedCount > 0
-        ? "warn"
-        : "ok";
-  const plexFresh = !plexOn
-    ? "not configured"
-    : !plexSync
-      ? "never synced"
-      : stale(plexSync.at)
-        ? "stale"
-        : "up to date";
-  // The last sync's result — always shown, with its relative time in the heading and the duration to the right.
-  const plexRes = plexSync ? plexSyncSummary(plexSync) : null;
-  const plexStats =
-    plexSync && plexRes ? (
-      <RunResult verb="Synced" when={ago(plexSync.at, nowMs)} duration={plexRes.duration}>
-        <StatRows stats={plexRes.stats} />
-      </RunResult>
-    ) : null;
+  // ── Media servers (Plex + Jellyfin) ──────────────────────────────────────
+  // One derived view per provider: its status badge, its last-run stats, and the two review lists its last
+  // scan produced. Both providers go through the same code, so their cards can't drift apart. Every provider is
+  // derived (its review lists render below regardless), but only the connected ones get a job card.
+  const mediaCards = serverRuns.map(({ provider, lastSync, candidates, unaccounted }) => {
+    const connected = isUsable(servers[provider]);
+    const candidateItems = connected ? (candidates?.items ?? []) : [];
+    const unaccountedItems = connected ? (unaccounted?.items ?? []) : [];
+    const state: JobState =
+      !lastSync || stale(lastSync.at) || candidateItems.length > 0 || unaccountedItems.length > 0 ? "warn" : "ok";
+    const freshness = !lastSync ? "never synced" : stale(lastSync.at) ? "stale" : "up to date";
+    // The last sync's result — always shown, with its relative time in the heading and the duration to the right.
+    const res = lastSync ? syncSummary(lastSync) : null;
+    return {
+      provider,
+      label: PROVIDER_LABEL[provider],
+      connected,
+      state,
+      freshness,
+      at: lastSync?.at,
+      candidates: candidateItems,
+      unaccounted: unaccountedItems,
+      stats:
+        lastSync && res ? (
+          <RunResult verb="Synced" when={ago(lastSync.at, nowMs)} duration={res.duration}>
+            <StatRows stats={res.stats} />
+          </RunResult>
+        ) : null,
+    };
+  });
+  // Job cards follow the same order as the forms below, so the two halves of the page agree.
+  const connectedServers = SERVER_DISPLAY_ORDER.flatMap((p) => {
+    const card = mediaCards.find((c) => c.provider === p);
+    return card?.connected ? [card] : [];
+  });
 
   // ── Backup ───────────────────────────────────────────────────────────────
   const backupState: JobState = !backup ? "warn" : !backup.ok || stale(backup.at) ? "warn" : "ok";
@@ -220,7 +248,7 @@ export default async function AdminPage() {
     <p className="text-[12px] text-red-400">{backup.error ?? "Backup failed."}</p>
   ) : (
     <RunResult verb="Backed up" when={ago(backup.at, nowMs)}>
-      {backupFileLines(backup.file, backup.prunedCount)}
+      {backupFileLines(backup.file)}
     </RunResult>
   );
 
@@ -231,12 +259,12 @@ export default async function AdminPage() {
         <p className="mt-1 text-sm text-[var(--color-muted)]">Signed in as {sessionUser.name}.</p>
       </div>
 
-      {/* One card per scheduled job — the run-now button (with a status dot) up top, stats at the bottom. */}
-      <div className="grid grid-cols-1 gap-[14px] md:grid-cols-3">
+      {/* One card per scheduled job — the run-now button + freshness badge up top, stats at the bottom. A media
+          server that's switched off has no card at all; you turn it back on from Media servers below. */}
+      <div className={`grid grid-cols-1 gap-[14px] ${JOB_GRID_COLS[2 + connectedServers.length]}`}>
         <JobCard
           button={
             <RefreshNowButton
-              dotColor={STATE_COLOR[refreshState]}
               freshness={refreshFresh}
               freshnessColor={STATE_COLOR[refreshState]}
               freshnessTitle={refresh ? absolute(refresh.at) : undefined}
@@ -255,43 +283,31 @@ export default async function AdminPage() {
           freshness={refreshFresh}
           color={STATE_COLOR[refreshState]}
           at={refresh?.at}
-          hasResult={!!refresh}
-          desc={<em>Re-pulls show &amp; movie metadata (episodes, air dates, status) from TMDB/TVDB</em>}
         />
 
-        <JobCard
-          button={
-            plexOn ? (
-              <SyncPlexButton
-                dotColor={STATE_COLOR[plexState]}
-                freshness={plexFresh}
-                freshnessColor={STATE_COLOR[plexState]}
-                freshnessTitle={plexSync ? absolute(plexSync.at) : undefined}
-                result={plexStats}
+        {connectedServers.map((c) => (
+          <JobCard
+            key={c.provider}
+            button={
+              <SyncServerButton
+                provider={c.provider}
+                label={c.label}
+                freshness={c.freshness}
+                freshnessColor={STATE_COLOR[c.state]}
+                freshnessTitle={c.at ? absolute(c.at) : undefined}
+                result={c.stats}
               />
-            ) : null
-          }
-          statusInButton={plexOn}
-          freshness={plexFresh}
-          color={STATE_COLOR[plexState]}
-          at={plexSync?.at}
-          hasResult={!!plexSync}
-          desc={
-            plexOn ? (
-              <em>Re-pulls your Plex catalog, including watched status and dates</em>
-            ) : (
-              <>
-                Set <span className="font-mono text-xs">PLEX_URL</span> +{" "}
-                <span className="font-mono text-xs">PLEX_TOKEN</span> to sync your library.
-              </>
-            )
-          }
-        />
+            }
+            statusInButton
+            freshness={c.freshness}
+            color={STATE_COLOR[c.state]}
+            at={c.at}
+          />
+        ))}
 
         <JobCard
           button={
             <BackupNowButton
-              dotColor={STATE_COLOR[backupState]}
               freshness={backupFresh}
               freshnessColor={STATE_COLOR[backupState]}
               freshnessTitle={backup ? absolute(backup.at) : undefined}
@@ -302,81 +318,114 @@ export default async function AdminPage() {
           freshness={backupFresh}
           color={STATE_COLOR[backupState]}
           at={backup?.at}
-          hasResult={!!backup}
-          desc={<em>Saves a full snapshot of the database; older snapshots are pruned after 14 days</em>}
         />
       </div>
 
-      {/* Plex review — only when the last sync surfaced something to act on. */}
-      {plexOn && candidateCount > 0 && (
-        <section className={`${CARD_CLASS} p-5`}>
-          <h3 className="font-display text-[16px] font-semibold">
-            In Plex but not tracked <span className="font-normal text-[var(--color-muted)]">({candidateCount})</span>
-          </h3>
-          <form action={addSelectedPlexItems} className="mt-3 space-y-3">
-            <ul className="space-y-1">
-              {candidates.map((c) => (
-                <li key={c.plexRatingKey}>
-                  <label className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[var(--color-surface-2)]">
-                    <input
-                      type="checkbox"
-                      name="ratingKey"
-                      value={c.plexRatingKey}
-                      defaultChecked
-                      className="accent-[#e5a00d]"
-                    />
-                    <span className="flex-1 text-sm">
-                      {c.title} {c.year && <span className="text-[var(--color-muted)]">({c.year})</span>}
-                      <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
-                        {c.mediaType === "tv" ? "TV" : "Movie"}
-                      </span>
-                      {c.plexWatched && <span className="ml-2 text-xs text-[var(--color-good)]">watched</span>}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <button type="submit" className={ACTION_BUTTON_CLASS}>
-              Add selected to tracking
-            </button>
-          </form>
-        </section>
-      )}
+      {/* Library review, per server — only when that server's last sync surfaced something to act on. Each list is
+          its own form because the two servers' item keys live in separate id spaces. */}
+      {mediaCards.map((c) => (
+        <Fragment key={c.provider}>
+          {c.candidates.length > 0 && (
+            <section className={`${CARD_CLASS} p-5`}>
+              <h3 className="font-display text-[16px] font-semibold">
+                In {c.label} but not tracked{" "}
+                <span className="font-normal text-[var(--color-muted)]">({c.candidates.length})</span>
+              </h3>
+              <form action={addSelectedLibraryItems} className="mt-3 space-y-3">
+                <input type="hidden" name="provider" value={c.provider} />
+                <ul className="space-y-1">
+                  {c.candidates.map((item) => (
+                    <li key={item.itemKey}>
+                      <label className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[var(--color-surface-2)]">
+                        <input
+                          type="checkbox"
+                          name="itemKey"
+                          value={item.itemKey}
+                          defaultChecked
+                          className="accent-[#e5a00d]"
+                        />
+                        <span className="flex-1 text-sm">
+                          {item.title} {item.year && <span className="text-[var(--color-muted)]">({item.year})</span>}
+                          <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
+                            {item.mediaType === "tv" ? "TV" : "Movie"}
+                          </span>
+                          {item.watched && <span className="ml-2 text-xs text-[var(--color-good)]">watched</span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <button type="submit" className={ACTION_BUTTON_CLASS}>
+                  Add selected to tracking
+                </button>
+              </form>
+            </section>
+          )}
 
-      {plexOn && unaccountedCount > 0 && (
-        <section className={`${CARD_CLASS} p-5`}>
-          <h3 className="font-display text-[16px] font-semibold">
-            Unmatched in Plex <span className="font-normal text-[var(--color-muted)]">({unaccountedCount})</span>
-          </h3>
-          <p className={`mt-2 ${DESC_CLASS}`}>
-            In your Plex libraries but with no TMDB, IMDb, or TVDB id, so the sync can neither match them to the catalog
-            nor add them automatically. Fix the match in Plex (item &rarr; Fix Match &rarr; pick the right title), then
-            they&rsquo;ll sync normally.
-          </p>
-          <ul className="mt-3 space-y-1">
-            {unaccounted.map((u) => (
-              <li key={u.plexRatingKey} className="flex items-center gap-3 rounded-md px-2 py-1.5">
-                <span className="flex-1 text-sm">
-                  {u.title} {u.year && <span className="text-[var(--color-muted)]">({u.year})</span>}
-                  <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
-                    {u.mediaType === "tv" ? "TV" : "Movie"}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+          {c.unaccounted.length > 0 && (
+            <section className={`${CARD_CLASS} p-5`}>
+              <h3 className="font-display text-[16px] font-semibold">
+                Unmatched in {c.label}{" "}
+                <span className="font-normal text-[var(--color-muted)]">({c.unaccounted.length})</span>
+              </h3>
+              <p className={`mt-2 ${DESC_CLASS}`}>
+                In your {c.label} libraries but with no TMDB, IMDb, or TVDB id, so the sync can neither match them to
+                the catalog nor add them automatically. Fix the match in {c.label}, then they&rsquo;ll sync normally.
+              </p>
+              <ul className="mt-3 space-y-1">
+                {c.unaccounted.map((u) => (
+                  <li key={u.itemKey} className="flex items-center gap-3 rounded-md px-2 py-1.5">
+                    <span className="flex-1 text-sm">
+                      {u.title} {u.year && <span className="text-[var(--color-muted)]">({u.year})</span>}
+                      <span className="ml-2 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--color-muted)]">
+                        {u.mediaType === "tv" ? "TV" : "Movie"}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </Fragment>
+      ))}
 
       {/* App settings. */}
       <section className={`${CARD_CLASS} p-5`}>
         <h2 className="font-display text-[16px] font-semibold">Settings</h2>
 
         <div className="mt-[14px]">
+          <h3 className="font-display text-[13px] font-semibold">Media servers</h3>
+          <p className={`mt-1 ${DESC_CLASS}`}>
+            Where your library lives. Each server can be switched on independently — with both connected, presence,
+            watch history and play links are merged, so you can migrate from one to the other without losing either.
+            Tokens are encrypted before they&rsquo;re stored, so a database backup carries no usable credential.
+          </p>
+          {/* Side by side once there's room for two columns of fields; stacked below that. Each form's own fields
+              stay a single column here, since half the card is too narrow to pair them up. */}
+          <div className="mt-3 grid grid-cols-1 items-start gap-x-8 gap-y-6 lg:grid-cols-2">
+            {SERVER_DISPLAY_ORDER.map((provider) => (
+              <MediaServerForm
+                key={provider}
+                provider={provider}
+                label={PROVIDER_LABEL[provider]}
+                fields={{
+                  enabled: servers[provider].enabled,
+                  url: servers[provider].url,
+                  libraries: servers[provider].libraries,
+                  user: servers[provider].user,
+                  hasToken: Boolean(servers[provider].token),
+                }}
+                urlPlaceholder={provider === "plex" ? "http://localhost:32400" : "http://localhost:8096"}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-[#22222a] pt-4">
           <SettingToggle enabled={manualWatched} label="Enable manual watched toggle" action={setManualWatched} />
           <p className={`mt-1.5 ${DESC_CLASS}`}>
-            Off by default — watch state comes from the Plex sync. Turn on to show manual mark-watched controls on the
-            home, show, and movie pages.
+            Off by default — watch state comes from your media server. Turn on to show manual mark-watched controls on
+            the home, show, and movie pages.
           </p>
         </div>
 
@@ -484,37 +533,25 @@ function JobCard({
   freshness,
   color,
   at,
-  desc,
-  hasResult,
   statusInButton,
 }: {
   button: React.ReactNode;
   freshness: string;
   color: string;
   at?: string;
-  desc: React.ReactNode;
-  // The last-run result now lives inside the button (so the button can hide it while a fresh run is in progress);
-  // this flag just tells the card whether to draw the divider above the description.
-  hasResult?: boolean;
   // When the button owns the status badge (all configured jobs), it renders the badge on its own line so a
   // progress bar / result below can't shove it around — otherwise the card renders the badge in the header itself.
   statusInButton?: boolean;
 }) {
+  // The button component renders both the run-now button and the last run's result, so the card is just that
+  // block inside its padding. There's no trailing spacer: it existed to push a description to the bottom, and
+  // with the descriptions gone it only left the cards taller than their content.
   return (
-    <section className={`flex h-full flex-col ${CARD_CLASS} px-5 py-[18px]`}>
-      <div className="mb-[14px] flex items-center justify-between gap-3">
+    <section className={`h-full ${CARD_CLASS} px-5 py-[18px]`}>
+      <div className="flex items-center justify-between gap-3">
         {button ?? <span />}
         {!statusInButton && <FreshnessBadge text={freshness} color={color} title={at ? absolute(at) : undefined} />}
       </div>
-      {/* The button (above) carries the last-run result; the explanatory blurb sinks to the bottom in pale italic
-          text, under a divider when there's a result to separate it from. */}
-      <div className="min-h-[18px] flex-1" />
-      <p
-        className={`text-pretty text-[12px] leading-[1.5] ${hasResult ? "border-t border-[#22222a] pt-3" : ""}`}
-        style={{ color: "#77777f" }}
-      >
-        {desc}
-      </p>
     </section>
   );
 }

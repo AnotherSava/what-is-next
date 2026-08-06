@@ -1,7 +1,13 @@
 import { type CastMember, parseCast } from "@/lib/cast";
 import { displayMonthYear, isoDate, monthYearISO, todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
-import { getPlexPresenceKeys, getShowPlexPresence, isPlexConfigured, type SeasonPlexSource } from "@/lib/plex";
+import {
+  getPresenceRefs,
+  getShowPresence,
+  isMediaServerEnabled,
+  type PresenceRef,
+  type SeasonSource,
+} from "@/lib/media";
 import { isWaitForFullSeasonEnabled } from "@/lib/settings";
 import {
   compareEpisodes,
@@ -30,8 +36,8 @@ export interface ShowSummary {
   imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page; null when unresolved
   progress: ShowProgress;
   group: DisplayGroup;
-  inPlex: boolean;
-  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+  onServer: boolean; // present in a connected media server's library (Plex or Jellyfin)
+  presence: PresenceRef | null; // which server holds it + its key there → the watch deep link; null when on none
   nextUpTitle: string | null; // title of progress.nextUp (the next episode to watch), or null when up to date
   lastWatchedAt: Date | null; // most recent episode watch (any source), or null when nothing dated/watched
 }
@@ -72,13 +78,14 @@ function latestWatchedAt(seen: { watchedAt: Date | null }[]): Date | null {
 
 export async function getFollowedShows(userId: string, today: string = todayISO()): Promise<ShowSummary[]> {
   const prisma = getPrisma();
-  const [states, seenByItem, plexShows, waitForFullSeason] = await Promise.all([
+  const onAnyServer = await isMediaServerEnabled();
+  const [states, seenByItem, presence, waitForFullSeason] = await Promise.all([
     prisma.userMediaState.findMany({
       where: { userId, mediaItem: { is: { mediaType: "tv" } } },
       include: { mediaItem: { include: { episodes: { select: EPISODE_SELECT } } } },
     }),
     seenEpisodesByItem(userId),
-    isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
+    onAnyServer ? getPresenceRefs(userId) : Promise.resolve(new Map<string, PresenceRef>()),
     isWaitForFullSeasonEnabled(),
   ]);
 
@@ -109,8 +116,8 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         progress,
         // A favorite is a strong "keep this around", so it's never hidden — a favorited off-list show shows as Planned.
         group: group === "off-list" && st.isFavorite ? "planned" : group,
-        inPlex: plexShows.has(st.mediaItemId),
-        plexRatingKey: plexShows.get(st.mediaItemId) ?? null,
+        onServer: presence.has(st.mediaItemId),
+        presence: presence.get(st.mediaItemId) ?? null,
         nextUpTitle,
         lastWatchedAt: latestWatchedAt(seen),
       };
@@ -177,8 +184,8 @@ export interface ShowDetailSeason {
   episodes: ShowDetailEpisode[];
   airedCount: number;
   watchedCount: number;
-  inPlex: boolean;
-  source: SeasonPlexSource | null; // this season's Plex source (resolution/HDR/audio/subs) for the media pill; null when not in Plex
+  onServer: boolean; // this season is in a connected server's library
+  source: SeasonSource | null; // this season's source (resolution/HDR/audio/subs) for the media pill; null when on no server
   latestWatchedAtISO: string | null; // machine date of the season's most recent watch — the season date-editor input value
   latestWatchedAtLabel: string | null; // human "Mon YYYY" of that watch, shown in the header when the season is folded + fully watched
 }
@@ -205,7 +212,7 @@ export interface ShowDetail {
   progress: ShowProgress;
   group: DisplayGroup;
   seasons: ShowDetailSeason[];
-  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+  presence: PresenceRef | null; // which server holds it + its key there → the watch deep link; null when on none
 }
 
 export async function getShowDetail(
@@ -224,15 +231,16 @@ export async function getShowDetail(
   if (!item) return null;
   const showId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
-  const [state, seen, plexPresence, waitForFullSeason] = await Promise.all([
+  const onAnyServer = await isMediaServerEnabled();
+  const [state, seen, presence, waitForFullSeason] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: showId } } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: showId, episodeId: { not: null } },
       select: { episodeId: true, watchedAt: true },
     }),
-    isPlexConfigured()
-      ? getShowPlexPresence(userId, showId)
-      : Promise.resolve({ seasons: new Set<number>(), sources: new Map<number, SeasonPlexSource>(), ratingKey: null }),
+    onAnyServer
+      ? getShowPresence(userId, showId)
+      : Promise.resolve({ seasons: new Set<number>(), sources: new Map<number, SeasonSource>(), ref: null }),
     isWaitForFullSeasonEnabled(),
   ]);
   const watched = watchedEpisodeIds(seen);
@@ -297,8 +305,8 @@ export async function getShowDetail(
         episodes,
         airedCount: episodes.filter((e) => e.aired).length,
         watchedCount: episodes.filter((e) => e.watched).length,
-        inPlex: plexPresence.seasons.has(s.seasonNumber),
-        source: plexPresence.sources.get(s.seasonNumber) ?? null,
+        onServer: presence.seasons.has(s.seasonNumber),
+        source: presence.sources.get(s.seasonNumber) ?? null,
         latestWatchedAtISO: latest ? isoDate(latest) : null,
         latestWatchedAtLabel: latest ? displayMonthYear(latest) : null,
       };
@@ -329,6 +337,6 @@ export async function getShowDetail(
     progress,
     group: displayGroup(state?.wantToWatch ?? false, progress),
     seasons,
-    plexRatingKey: plexPresence.ratingKey,
+    presence: presence.ref,
   };
 }

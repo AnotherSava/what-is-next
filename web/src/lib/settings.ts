@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import type { DownloadSource } from "@/lib/downloadSources";
+import type { MediaProvider } from "@/lib/media/types";
 
 // App-level configuration and bookkeeping (brief §5 Setting model, §5a rule 4: app state lives in Setting,
 // per-user preferences would get their own table). JSON-encoded rows; this module is the only access path —
@@ -35,8 +36,9 @@ const backupLastRunSchema = z.object({
   error: z.string().nullable(),
 });
 
-// Plex sync bookkeeping (Plex integration): last run summary for the admin page.
-const plexLastSyncSchema = z.object({
+// Media-server sync bookkeeping: last run summary for the admin page. One row per provider (see SYNC_KEYS), so
+// Plex and Jellyfin cards each report their own last run.
+const lastSyncSchema = z.object({
   at: z.string(),
   trigger: z.enum(["cron", "manual", "view"]),
   matchedShows: z.number().int(),
@@ -44,42 +46,40 @@ const plexLastSyncSchema = z.object({
   presenceSeasons: z.number().int(),
   importedWatches: z.number().int().default(0), // watch events imported this run; default keeps pre-feature summaries parseable
   durationMs: z.number().int().default(0), // wall-clock of the sync; default keeps pre-timing summaries parseable
-  unaccounted: z.number().int().default(0), // Plex items we couldn't identify (no id); default keeps pre-feature summaries parseable
+  unaccounted: z.number().int().default(0), // library items we couldn't identify (no id); default keeps pre-feature summaries parseable
 });
 
-// A Plex library item that isn't yet in the tracker — surfaced for the "review, then add" flow. Carries the
-// external ids (to hydrate from TMDB) + the Plex rating key (to read episode watched state) + whether it's
-// been watched in Plex.
-const plexCandidateSchema = z.object({
-  plexRatingKey: z.string(),
+// A library item that isn't yet in the tracker — surfaced for the "review, then add" flow. Carries the external
+// ids (to hydrate from TMDB) + the item's key on that server (to read episode watch state) + whether it's watched.
+const candidateSchema = z.object({
+  itemKey: z.string(),
   mediaType: z.enum(["tv", "movie"]),
   title: z.string(),
   year: z.number().int().nullable(),
   tmdbId: z.number().int().nullable(),
   tvdbId: z.number().int().nullable(),
   imdbId: z.string().nullable(),
-  plexWatched: z.boolean(),
-  lastViewedAt: z.number().int().nullable(), // Unix epoch seconds — for the movie watch date when added
+  watched: z.boolean(),
+  watchedAt: z.string().nullable(), // ISO timestamp — the movie watch date when adopted; null if unknown
 });
-export type PlexCandidate = z.infer<typeof plexCandidateSchema>;
 
-const plexCandidatesSchema = z.object({
+const candidatesSchema = z.object({
   at: z.string(),
-  items: z.array(plexCandidateSchema),
+  items: z.array(candidateSchema),
 });
 
-// A Plex library item the sync couldn't reconcile — no catalog match AND no external id, so it can't be
-// auto-added like a candidate (nothing to hydrate from). Surfaced for the admin (see scanPlex's UnaccountedItem);
-// it usually means Plex hasn't matched the file to a metadata agent, so the fix is on the Plex side.
-const plexUnaccountedItemSchema = z.object({
-  plexRatingKey: z.string(),
+// A library item the sync couldn't reconcile — no catalog match AND no external id, so it can't be auto-added
+// like a candidate (nothing to hydrate from). Surfaced for the admin (see UnaccountedItem); it usually means the
+// server hasn't matched the file to a metadata agent, so the fix is on the server side.
+const unaccountedItemSchema = z.object({
+  itemKey: z.string(),
   mediaType: z.enum(["tv", "movie"]),
   title: z.string(),
   year: z.number().int().nullable(),
 });
-const plexUnaccountedSchema = z.object({
+const unaccountedSchema = z.object({
   at: z.string(),
-  items: z.array(plexUnaccountedItemSchema),
+  items: z.array(unaccountedItemSchema),
 });
 
 // User-facing app setting: whether the manual "mark watched" controls are shown. Off by default — watch state
@@ -103,56 +103,109 @@ const downloadSourceSchema = z.object({
 });
 const downloadSourcesSchema = z.object({ sources: z.array(downloadSourceSchema) });
 
-// Per-show watched-episode-count cursor (Plex integration): plexRatingKey → total viewedLeafCount at the last
-// sync. Lets the next sync skip the /allLeaves fetch for any show whose count is unchanged (see scanPlex).
-const plexWatchCursorSchema = z.object({
+// The three per-show cursors that keep a steady-state sync cheap, each mapping the show's item key ON THAT SERVER
+// to a count observed at the last sync (see ScanCursors): watched episodes, total episodes, and seasons whose
+// source was captured. An unchanged count lets the next sync skip that show's episode fetch entirely.
+const cursorSchema = z.object({
   at: z.string(),
   shows: z.record(z.string(), z.number().int()),
 });
 
-// Per-show total-episode-count cursor (Plex integration): plexRatingKey → total leafCount at the last sync. Lets
-// the next sync skip the /allLeaves fetch for episode presence on any show whose library episode count is
-// unchanged — the same steady-state optimisation as the watch cursor, for the Download view's data (see scanPlex).
-const plexPresenceCursorSchema = z.object({
-  at: z.string(),
-  shows: z.record(z.string(), z.number().int()),
-});
+// The media server's stable id, captured each sync — Plex's machineIdentifier, Jellyfin's server Id. Combined
+// with a per-item key it builds a deep link to watch the item. See src/lib/media/link.ts.
+const serverIdSchema = z.object({ at: z.string(), serverId: z.string() });
 
-// Per-show source-captured marker (Plex integration): plexRatingKey → number of seasons whose Plex source
-// (resolution/HDR/audio/subtitles) was derived at the last sync. A key being present means source has been
-// captured at least once; the next sync then re-derives it only when the show's episode count moves — a season's
-// format is static, so this keeps source capture off the steady-state path (see scanPlex).
-const plexSourceCursorSchema = z.object({
-  at: z.string(),
-  shows: z.record(z.string(), z.number().int()),
+// Media-server connections, edited from /admin. This is the source of truth: the PLEX_*/JELLYFIN_* environment
+// variables only seed this row the first time it's read (see media/config.ts) and are ignored afterwards.
+// `user` is Jellyfin-only (which account's watch state to read); Plex's token is already user-scoped.
+const mediaServerSchema = z.object({
+  enabled: z.boolean(),
+  url: z.string(),
+  token: z.string(),
+  libraries: z.string(), // comma-separated library names to sync; blank = all TV + movie libraries
+  user: z.string(),
 });
-
-// The Plex server's stable machineIdentifier (Plex integration), captured each sync. Combined with a per-item
-// plexRatingKey it builds an app.plex.tv deep link to watch the item. See src/lib/plex/link.ts.
-const plexServerSchema = z.object({ at: z.string(), machineIdentifier: z.string() });
+const mediaServersSchema = z.object({ plex: mediaServerSchema, jellyfin: mediaServerSchema });
 
 const SETTING_SCHEMAS = {
   "refresh:lastRun": refreshLastRunSchema,
   "backup:lastRun": backupLastRunSchema,
-  "plex:lastSync": plexLastSyncSchema,
-  "plex:candidates": plexCandidatesSchema,
-  "plex:unaccounted": plexUnaccountedSchema,
-  "plex:watchCursor": plexWatchCursorSchema,
-  "plex:presenceCursor": plexPresenceCursorSchema,
-  "plex:sourceCursor": plexSourceCursorSchema,
-  "plex:server": plexServerSchema,
+  "plex:lastSync": lastSyncSchema,
+  "plex:candidates": candidatesSchema,
+  "plex:unaccounted": unaccountedSchema,
+  "plex:watchCursor": cursorSchema,
+  "plex:presenceCursor": cursorSchema,
+  "plex:sourceCursor": cursorSchema,
+  "plex:server": serverIdSchema,
+  "jellyfin:lastSync": lastSyncSchema,
+  "jellyfin:candidates": candidatesSchema,
+  "jellyfin:unaccounted": unaccountedSchema,
+  "jellyfin:watchCursor": cursorSchema,
+  "jellyfin:presenceCursor": cursorSchema,
+  "jellyfin:sourceCursor": cursorSchema,
+  "jellyfin:server": serverIdSchema,
+  "settings:mediaServers": mediaServersSchema,
   "settings:manualWatched": manualWatchedSchema,
   "settings:waitForFullSeason": waitForFullSeasonSchema,
   "settings:downloadSources": downloadSourcesSchema,
 } as const;
 
+// Each provider's bookkeeping keys in one place, so provider-generic code can read and write them without a
+// stringly-typed key built at the call site. The two providers' keys share their schemas, so SettingValue
+// resolves to the same type either way.
+export const SYNC_KEYS = {
+  plex: {
+    lastSync: "plex:lastSync",
+    candidates: "plex:candidates",
+    unaccounted: "plex:unaccounted",
+    watchCursor: "plex:watchCursor",
+    presenceCursor: "plex:presenceCursor",
+    sourceCursor: "plex:sourceCursor",
+    server: "plex:server",
+  },
+  jellyfin: {
+    lastSync: "jellyfin:lastSync",
+    candidates: "jellyfin:candidates",
+    unaccounted: "jellyfin:unaccounted",
+    watchCursor: "jellyfin:watchCursor",
+    presenceCursor: "jellyfin:presenceCursor",
+    sourceCursor: "jellyfin:sourceCursor",
+    server: "jellyfin:server",
+  },
+} as const satisfies Record<MediaProvider, Record<string, SettingKey>>;
+
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
 export type SettingValue<K extends SettingKey> = z.infer<(typeof SETTING_SCHEMAS)[K]>;
 
-export async function getSetting<K extends SettingKey>(key: K): Promise<SettingValue<K> | null> {
+// Read a stored value along with whether the row exists at all. The distinction matters for settings that seed
+// themselves from the environment on first use (media/config.ts): "absent" means seed it, whereas "present but
+// unreadable" must not silently overwrite what the owner configured.
+//
+// A row that fails to parse yields null rather than throwing: these settings are read from the root layout on
+// every request, so one legacy or hand-edited row must not be able to 500 the entire site. The write path still
+// validates strictly, so nothing unparseable can be stored by the app itself.
+export async function readSetting<K extends SettingKey>(
+  key: K,
+): Promise<{ present: boolean; value: SettingValue<K> | null }> {
   const row = await getPrisma().setting.findUnique({ where: { key } });
-  if (!row) return null;
-  return SETTING_SCHEMAS[key].parse(JSON.parse(row.value)) as SettingValue<K>;
+  if (!row) return { present: false, value: null };
+  let json: unknown;
+  try {
+    json = JSON.parse(row.value);
+  } catch {
+    console.warn(`[settings] ignoring "${key}": stored value is not valid JSON`);
+    return { present: true, value: null };
+  }
+  const parsed = SETTING_SCHEMAS[key].safeParse(json);
+  if (!parsed.success) {
+    console.warn(`[settings] ignoring unreadable "${key}": ${parsed.error.message}`);
+    return { present: true, value: null };
+  }
+  return { present: true, value: parsed.data as SettingValue<K> };
+}
+
+export async function getSetting<K extends SettingKey>(key: K): Promise<SettingValue<K> | null> {
+  return (await readSetting(key)).value;
 }
 
 export async function setSetting<K extends SettingKey>(key: K, value: SettingValue<K>): Promise<void> {
@@ -169,11 +222,6 @@ export async function isManualWatchedEnabled(): Promise<boolean> {
 // it in the Download view. On by default — the owner turns it off to be surfaced episodes as soon as they air.
 export async function isWaitForFullSeasonEnabled(): Promise<boolean> {
   return (await getSetting("settings:waitForFullSeason"))?.enabled ?? true;
-}
-
-// The Plex server's machineIdentifier, or null until a sync has recorded it — needed to build watch deep links.
-export async function getPlexServerId(): Promise<string | null> {
-  return (await getSetting("plex:server"))?.machineIdentifier ?? null;
 }
 
 // The owner-configured Download-view source links (empty when unset) — the Download page renders a chip per source.

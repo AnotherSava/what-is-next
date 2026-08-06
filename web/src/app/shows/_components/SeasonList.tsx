@@ -13,7 +13,7 @@ import {
 } from "../actions";
 
 // The show detail page's left column (design: "Shows Page - Seasons"): an accordion of seasons, each expanding to
-// its episode list. Seasons in Plex show a source pill (quality + original-audio / English-subtitle warnings); seasons that
+// its episode list. Seasons you have show a source pill (quality + original-audio / English-subtitle warnings); seasons that
 // aren't show a per-season Download picker. When manual watched-editing is on (canEdit), unwatched aired episodes
 // reveal "Set watched" / "up to here" on hover, and every watched episode/season shows a click-to-edit watched date
 // with a date picker and a trash to unmark. The next-up episode gets an accent rail. All owner actions re-verify
@@ -37,11 +37,11 @@ export interface SeasonListSeason {
   airedCount: number;
   watchedCount: number;
   fullyWatched: boolean;
-  inPlex: boolean;
+  onServer: boolean;
   videoLabel: string | null; // source pill text ("4K Dolby Vision", "1080p", …); null → no video info
-  audioWarning: string | null; // "No <original-language> audio" when a Plex season's audio lacks the show's original-language track; null otherwise
-  subtitleWarning: string | null; // "No English subtitles" when a Plex season's subtitles lack English; null otherwise
-  downloadLinks: DownloadLink[]; // per-season search links, only when the season isn't in Plex
+  audioWarning: string | null; // "No <original-language> audio" when the season's copy lacks the show's original-language track; null otherwise
+  subtitleWarning: string | null; // "No English subtitles" when the season's copy lacks English subtitles; null otherwise
+  downloadLinks: DownloadLink[]; // per-season search links, only when the season isn't on a server
   latestWatchedISO: string | null; // season date-editor input value (its most recent episode watch)
   latestWatchedLabel: string | null; // "Mon YYYY" shown when the season is folded + fully watched
   episodes: SeasonListEpisode[];
@@ -99,7 +99,7 @@ export function SeasonList({
       {seasons.map((s, si) => {
         const isOpen = !!open[s.seasonNumber];
         const seaKey = `sea:${s.seasonNumber}`;
-        const showPill = s.inPlex && (s.videoLabel || s.audioWarning || s.subtitleWarning);
+        const showPill = s.onServer && (s.videoLabel || s.audioWarning || s.subtitleWarning);
         return (
           <div key={s.seasonNumber}>
             <div
@@ -154,7 +154,7 @@ export function SeasonList({
                 </span>
               )}
 
-              {!s.inPlex && s.downloadLinks.length > 0 && (
+              {!s.onServer && s.downloadLinks.length > 0 && (
                 <span className="relative inline-flex min-w-0 items-center">
                   <button
                     type="button"

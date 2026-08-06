@@ -5,7 +5,7 @@ import { posterUrl } from "@/lib/images";
 import { MovieHeroHeart } from "./MovieHeroActions";
 
 // The movie-detail hero poster (design: "Movies Page - Plex States", revised). Reuses the app's shared poster
-// primitives (globals.css .wn-*): hover reveals a big Play triangle when the movie is in Plex (whole poster links
+// primitives (globals.css .wn-*): hover reveals a big Play triangle when you have the movie (whole poster links
 // to Plex), or a download-source picker when it isn't. A ★ IMDb badge sits top-left, the favourite heart top-right,
 // and — when watched — a stamp along the bottom. Server-rendered; the heart is the one client island inside.
 
@@ -13,7 +13,8 @@ export function MovieHeroPoster({
   movieId,
   title,
   posterPath,
-  inPlex,
+  onServer,
+  watchOn,
   watchUrl,
   downloadLinks,
   rating,
@@ -25,7 +26,8 @@ export function MovieHeroPoster({
   movieId: string;
   title: string;
   posterPath: string | null;
-  inPlex: boolean; // in Plex → the poster plays (or is inert if no deep-link); not in Plex → the download picker
+  onServer: boolean; // on a server → the poster plays (or is inert if no deep-link); otherwise → the download picker
+  watchOn?: string; // which server the play link opens ("Plex" | "Jellyfin"), for the label
   watchUrl: string | null; // Plex deep-link when resolvable; null even for in-Plex rows that predate ratingKey capture
   downloadLinks: DownloadLink[];
   rating: number | null;
@@ -50,12 +52,12 @@ export function MovieHeroPoster({
       )}
 
       {watchUrl ? (
-        <a href={watchUrl} target="_blank" rel="noopener noreferrer" className="wn-play-overlay" aria-label={`Play ${title} in Plex`}>
+        <a href={watchUrl} target="_blank" rel="noopener noreferrer" className="wn-play-overlay" aria-label={watchOn ? `Play ${title} in ${watchOn}` : `Play ${title}`}>
           <svg width="48" height="54" viewBox="0 0 8 9" fill="#fff" aria-hidden style={{ filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.55))" }}>
             <path d="M0 0.5 L8 4.5 L0 8.5 Z" />
           </svg>
         </a>
-      ) : !inPlex && downloadLinks.length > 0 ? (
+      ) : !onServer && downloadLinks.length > 0 ? (
         <span className="wn-dlmenu z-[2]">
           <span className="font-num mb-0.5 text-center text-[11px] font-bold tracking-[0.09em] text-[#aeb4c4]">SEARCH ON</span>
           {downloadLinks.map((l) => (

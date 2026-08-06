@@ -5,10 +5,10 @@ import { HeroSpecRow } from "@/app/_components/HeroSpecRow";
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { downloadLinksFor } from "@/lib/downloadSources";
-import { formatResolution, isPlexConfigured, plexWatchUrl } from "@/lib/plex";
+import { formatResolution, getWatchLinker } from "@/lib/media";
 import { isEndedStatus } from "@/lib/progress";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getDownloadSources, getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
+import { getDownloadSources, isManualWatchedEnabled } from "@/lib/settings";
 import { getShowDetail } from "@/lib/shows";
 import { languageName } from "@/lib/tmdb";
 import { CastColumn } from "../_components/CastColumn";
@@ -29,10 +29,10 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [show, manualWatched, plexServerId, sources] = await Promise.all([
+  const [show, manualWatched, watchLink, sources] = await Promise.all([
     getShowDetail(displayedUser.id, slug),
     isManualWatchedEnabled(),
-    isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
+    getWatchLinker(),
     getDownloadSources(),
   ]);
   if (!show) notFound();
@@ -42,7 +42,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
   const { progress } = show;
   // Manual watch-editing is gated on the owner AND the "mark watched" setting; the favourite/kebab need only owner.
   const canMark = canEdit && manualWatched;
-  const watchUrl = plexWatchUrl(plexServerId, show.plexRatingKey);
+  const watch = watchLink(show.presence);
   const rating = show.imdbRating ?? show.tmdbRating;
   const progressPct = progress.airedCount > 0 ? Math.round((progress.watchedAiredCount / progress.airedCount) * 100) : null;
   const hasWatches = show.seasons.some((s) => s.watchedCount > 0);
@@ -62,7 +62,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
   const lastRegular = regular.length ? regular[regular.length - 1].seasonNumber : (show.seasons.at(-1)?.seasonNumber ?? null);
   const initialOpenSeason = progress.nextUp?.seasonNumber ?? lastRegular;
 
-  // The show's original-language audio is the track you'd watch it in; warn per season when it's absent from Plex.
+  // The show's original-language audio is the track you'd watch it in; warn per season when the copy lacks it.
   // Unknown original (TVDB-sourced / not-yet-refreshed / the "xx" no-language placeholder) → no audio warning at all.
   const originalAudioLang = show.originalLanguage && show.originalLanguage !== "xx" ? languageName(show.originalLanguage) : null;
 
@@ -79,11 +79,11 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
       airedCount: s.airedCount,
       watchedCount: s.watchedCount,
       fullyWatched: s.airedCount > 0 && s.watchedCount >= s.airedCount,
-      inPlex: s.inPlex,
+      onServer: s.onServer,
       videoLabel,
       audioWarning: originalAudioLang && audioTracks.length > 0 && !audioTracks.some((t) => t.code === show.originalLanguage || (t.code == null && t.lang === originalAudioLang)) ? `No ${originalAudioLang} audio` : null,
       subtitleWarning: subtitleLangs.length > 0 && !subtitleLangs.includes("English") ? "No English subtitles" : null,
-      downloadLinks: s.inPlex ? [] : downloadLinksFor(sources, "shows", query),
+      downloadLinks: s.onServer ? [] : downloadLinksFor(sources, "shows", query),
       latestWatchedISO: s.latestWatchedAtISO,
       latestWatchedLabel: s.latestWatchedAtLabel,
       episodes: s.episodes.map((e) => ({
@@ -118,7 +118,8 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
             showId={show.id}
             title={show.title}
             posterPath={show.posterPath}
-            watchUrl={watchUrl}
+            watchUrl={watch?.url ?? null}
+            watchOn={watch?.server}
             rating={rating}
             isFavorite={show.isFavorite}
             canFavorite={canEdit}

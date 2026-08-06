@@ -1,28 +1,6 @@
-// Public surface of the Plex integration. Import from "@/lib/plex".
-export { PlexClient, PlexError, getPlex, isPlexConfigured } from "./client";
-export {
-  addPlexItems,
-  applyEpisodePresence,
-  applyPresence,
-  applyWatched,
-  scanPlex,
-  type EpisodePresenceSignal,
-  type PlexSyncDeps,
-  type PresenceRow,
-  type ScanResult,
-  type UnaccountedItem,
-  type WatchedSignal,
-} from "./sync";
-export {
-  getMoviePlexPresence,
-  getPlexEpisodePresence,
-  getPlexPresenceKeys,
-  getShowPlexPresence,
-  type SeasonPlexSource,
-} from "./presence";
-export { type AudioTrack, formatAudio, formatResolution, formatSubtitles } from "./source";
-export { plexWatchUrl, plexWebUrl } from "./link";
-export { plexDeps, syncPlexPresence, syncPlexPresenceIfStale, viewSyncTtlMs } from "./run";
-export { plexSyncSummary } from "./summary";
+// Public surface of the Plex provider. Everything provider-neutral — presence reads, watch links, suppression,
+// sync orchestration — lives in "@/lib/media"; this module is only the Plex client and its scanner.
+export { PlexClient, type PlexClientOptions } from "./client";
+export { createPlexScanner, scanPlex, type PlexScannerOptions } from "./scan";
+export { deriveVideoSource } from "./source";
 export { parseGuids } from "./schemas";
-export { clearEpisodeSuppressions, clearMovieSuppression, suppressWatch } from "./suppression";

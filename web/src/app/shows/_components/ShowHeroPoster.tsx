@@ -4,7 +4,7 @@ import { posterUrl } from "@/lib/images";
 import { ShowHeroHeart } from "./ShowHeroHeart";
 
 // The show-detail hero poster (design: "Shows Page - Seasons"). Same language as the movie hero: hovering the
-// poster reveals a big Play triangle when the show is in Plex (the whole poster deep-links to Plex, which resumes
+// poster reveals a big Play triangle when you have the show (the whole poster deep-links to the server, which resumes
 // the next unwatched episode), a ★ rating chip sits top-left, the favourite heart top-right, and a thin watch-
 // progress bar runs along the bottom. Server-rendered; the heart is the one client island inside.
 export function ShowHeroPoster({
@@ -12,6 +12,7 @@ export function ShowHeroPoster({
   title,
   posterPath,
   watchUrl,
+  watchOn,
   rating,
   isFavorite,
   canFavorite,
@@ -20,7 +21,8 @@ export function ShowHeroPoster({
   showId: string;
   title: string;
   posterPath: string | null;
-  watchUrl: string | null; // Plex deep-link when the show is in Plex and its ratingKey is known; else null → inert poster
+  watchUrl: string | null; // deep-link when the show is on a server and its item key is known; else null → inert poster
+  watchOn?: string; // which server the play link opens ("Plex" | "Jellyfin"), for the label
   rating: number | null; // IMDb (preferred) or TMDB score for the ★ chip; null hides it
   isFavorite: boolean;
   canFavorite: boolean;
@@ -42,7 +44,7 @@ export function ShowHeroPoster({
       )}
 
       {watchUrl && (
-        <a href={watchUrl} target="_blank" rel="noopener noreferrer" className="wn-play-overlay" aria-label={`Play ${title} in Plex`}>
+        <a href={watchUrl} target="_blank" rel="noopener noreferrer" className="wn-play-overlay" aria-label={watchOn ? `Play ${title} in ${watchOn}` : `Play ${title}`}>
           <svg width="48" height="54" viewBox="0 0 8 9" fill="#fff" aria-hidden style={{ filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.55))" }}>
             <path d="M0 0.5 L8 4.5 L0 8.5 Z" />
           </svg>

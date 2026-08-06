@@ -3,12 +3,11 @@ import type { Metadata, Viewport } from "next";
 import { Archivo_Narrow, Hanken_Grotesk, Instrument_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { cookies } from "next/headers";
 import { clampCols, COLS_COOKIE, DEFAULT_COLS } from "@/lib/gridDensity";
-import { isPlexConfigured, viewSyncTtlMs } from "@/lib/plex";
+import { isMediaServerEnabled, lastSyncedAt, viewSyncTtlMs } from "@/lib/media";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getSetting } from "@/lib/settings";
 import { Footer } from "./_components/Footer";
 import { GridDensityProvider } from "./_components/GridDensity";
-import { PlexFreshener } from "./_components/PlexFreshener";
+import { MediaFreshener } from "./_components/MediaFreshener";
 import { SiteHeader } from "./_components/SiteHeader";
 
 // Type system from the design reference: Instrument Sans (body), Space Grotesk (titles/headings), Archivo Narrow
@@ -48,10 +47,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   ]);
   const { isAdmin } = permissionsFor(sessionUser, displayedUser);
 
-  // Freshness pill beside the gear (owner + Plex configured only): how current the page's Plex-synced watch data is.
-  // Red once the last sync is 3× the sync interval old — genuinely behind.
-  const plexLastSync = isAdmin && isPlexConfigured() ? await getSetting("plex:lastSync") : null;
-  const freshness = plexLastSync ? { lastSyncAt: plexLastSync.at, staleThresholdMs: 3 * viewSyncTtlMs() } : null;
+  // Freshness pill beside the gear (owner + a connected media server only): how current the page's synced watch
+  // data is. With two servers connected it follows the one that's LAGGING (lastSyncedAt returns the oldest run),
+  // so the pill can't read green while half the data is a day stale. Red once that is 3× the sync interval old.
+  const mediaOn = isAdmin && (await isMediaServerEnabled());
+  const syncedAt = mediaOn ? await lastSyncedAt() : null;
+  const freshness = syncedAt ? { lastSyncAt: syncedAt, staleThresholdMs: 3 * viewSyncTtlMs() } : null;
 
   // Seed the poster-grid column count from the persisted cookie so the server renders the chosen density (no flash).
   const colsCookie = cookieStore.get(COLS_COOKIE)?.value;
@@ -67,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <SiteHeader isOwner={isAdmin} freshness={freshness} />
           <main className="mx-auto w-full max-w-[1180px] flex-1 px-7 pt-[34px] pb-[120px]">{children}</main>
           <Footer isOwner={isAdmin} />
-          {isAdmin && isPlexConfigured() && <PlexFreshener />}
+          {mediaOn && <MediaFreshener />}
         </GridDensityProvider>
       </body>
     </html>

@@ -10,7 +10,7 @@ import { RatingBadge } from "./cardUi";
 import { useFavoriteToggle } from "./useFavoriteToggle";
 
 // The shared poster-grid card (design reference): a 2:3 poster with an IMDb ★ rating chip (top-left) and a
-// favourite heart (top-right), over which a play triangle (in-Plex items) or a download-source menu (Download view)
+// favourite heart (top-right), over which a play triangle (items you have) or a download-source menu (Download view)
 // is revealed on hover; below it, a page-specific text body passed as `children`. One component so every view's
 // cards read and behave identically. Client because the heart toggles optimistically and the hover states are CSS
 // on `.wn-posterwrap`.
@@ -24,6 +24,7 @@ export function PosterCard({
   posterPath,
   detailHref,
   watchUrl,
+  watchOn,
   rating,
   isFavorite,
   canFavorite,
@@ -36,6 +37,7 @@ export function PosterCard({
   posterPath: string | null;
   detailHref: string;
   watchUrl?: string | null;
+  watchOn?: string | null; // which server the play link opens ("Plex" | "Jellyfin"), for the label
   rating?: number | null; // IMDb score, already visibility-filtered by the caller; null → no chip
   isFavorite: boolean;
   canFavorite: boolean; // owner + favouriting enabled → interactive; otherwise a read-only badge
@@ -50,14 +52,14 @@ export function PosterCard({
       <div className="wn-postermedia relative aspect-[2/3] overflow-hidden">
         <PosterImage path={posterPath} alt={title} />
 
-        {/* Click target covering the poster: opens Plex when playable, else navigates to the detail page. It sits
-            below the chips/heart/menu (z-1) so those stay clickable. */}
+        {/* Click target covering the poster: opens the media server when playable, else navigates to the detail
+            page. It sits below the chips/heart/menu (z-1) so those stay clickable. */}
         {watchUrl ? (
           <a
             href={watchUrl}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Play ${title} in Plex`}
+            aria-label={watchOn ? `Play ${title} in ${watchOn}` : `Play ${title}`}
             className="absolute inset-0 z-[1]"
           />
         ) : (
@@ -101,7 +103,7 @@ export function PosterCard({
         <FavoriteHeart mediaType={mediaType} id={id} isFavorite={isFavorite} canFavorite={canFavorite} />
       </div>
 
-      {/* The text body always links to the detail page — the poster may instead play in Plex, so this keeps the
+      {/* The text body always links to the detail page — the poster may instead play on the server, so this keeps the
           show/movie page (seasons, tracking, favouriting) reachable from every card. */}
       <Link href={detailHref} className="wn-ct-body block cursor-default">
         {children}

@@ -1,21 +1,25 @@
 "use client";
 
 import { type ReactNode, useState, useTransition } from "react";
-import { syncPlexNow } from "../actions";
+import type { MediaProvider } from "@/lib/media/types";
+import { syncMediaServerNow } from "../actions";
 import { JOB_BUTTON_CLASS, JOB_BUTTON_STYLE } from "./buttonStyle";
 import { FreshnessBadge } from "./FreshnessBadge";
 
-// Triggers a full Plex scan (presence + candidate/unmatched refresh). useTransition keeps it responsive during
-// the round-trip to Plex + TMDB. A failed sync (e.g. a 401 from a stale token) shows inline instead of crashing.
-// The status badge shares the button's line so a long error message below can't shove it around.
-export function SyncPlexButton({
-  dotColor,
+// Triggers a full scan of one media server (presence + candidate/unmatched refresh). useTransition keeps it
+// responsive during the round-trip to the server + TMDB. A failed sync (e.g. a 401 from a stale token) shows
+// inline instead of crashing. The status badge shares the button's line so a long error message below can't shove
+// it around.
+export function SyncServerButton({
+  provider,
+  label,
   freshness,
   freshnessColor,
   freshnessTitle,
   result,
 }: {
-  dotColor: string;
+  provider: MediaProvider;
+  label: string; // "Plex" | "Jellyfin"
   freshness: string;
   freshnessColor: string;
   freshnessTitle?: string;
@@ -32,7 +36,7 @@ export function SyncPlexButton({
           onClick={() =>
             start(async () => {
               setError(null);
-              const res = await syncPlexNow();
+              const res = await syncMediaServerNow(provider);
               // On success the action revalidates the route, so the card's "Synced <when>" result re-renders itself.
               if (!res.ok) setError(res.error);
             })
@@ -40,8 +44,7 @@ export function SyncPlexButton({
           className={JOB_BUTTON_CLASS}
           style={JOB_BUTTON_STYLE}
         >
-          <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: dotColor }} aria-hidden />
-          {pending ? "Syncing…" : "Sync Plex now"}
+          {pending ? "Syncing…" : `Sync ${label} now`}
         </button>
         <FreshnessBadge text={freshness} color={freshnessColor} title={freshnessTitle} />
       </div>

@@ -1,6 +1,12 @@
 import { type CastMember, parseCast } from "@/lib/cast";
 import { getPrisma } from "@/lib/db";
-import { type AudioTrack, getMoviePlexPresence, getPlexPresenceKeys, isPlexConfigured } from "@/lib/plex";
+import {
+  getMoviePresence,
+  getPresenceRefs,
+  isMediaServerEnabled,
+  type AudioTrack,
+  type PresenceRef,
+} from "@/lib/media";
 
 // Read-side data layer for /movies (brief §8.4). A movie is "watched" iff it has a SeenEvent (episodeId null)
 // — the append-only log is the source of truth — and its watch date is the latest such event. Unlike shows,
@@ -23,8 +29,8 @@ export interface MovieSummary {
   watched: boolean;
   watchedAt: Date | null;
   addedAt: Date; // when the title was added to the list (UserMediaState.createdAt) — the "added" half of the sort key
-  inPlex: boolean; // present in the user's Plex library (membership in the presence map, even if the ratingKey predates capture)
-  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+  onServer: boolean; // present in a connected media server's library (Plex or Jellyfin)
+  presence: PresenceRef | null; // which server holds it + its key there → the watch deep link; null when on none
 }
 
 export interface MoviesView {
@@ -34,7 +40,8 @@ export interface MoviesView {
 
 export async function getMovies(userId: string): Promise<MoviesView> {
   const prisma = getPrisma();
-  const [states, seen, plexMovies] = await Promise.all([
+  const onAnyServer = await isMediaServerEnabled();
+  const [states, seen, presence] = await Promise.all([
     prisma.userMediaState.findMany({
       where: { userId, mediaItem: { is: { mediaType: "movie" } } },
       include: { mediaItem: true },
@@ -44,7 +51,7 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       where: { userId, episodeId: null, mediaItem: { is: { mediaType: "movie" } } },
       select: { mediaItemId: true, watchedAt: true },
     }),
-    isPlexConfigured() ? getPlexPresenceKeys(userId) : Promise.resolve(new Map<string, string | null>()),
+    onAnyServer ? getPresenceRefs(userId) : Promise.resolve(new Map<string, PresenceRef>()),
   ]);
 
   // Latest watch date per movie (null "seen, date unknown" events still mark it watched).
@@ -78,8 +85,8 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       watched: isWatched,
       watchedAt: latestWatch.get(st.mediaItemId) ?? null,
       addedAt: st.createdAt,
-      inPlex: plexMovies.has(st.mediaItemId),
-      plexRatingKey: plexMovies.get(st.mediaItemId) ?? null,
+      onServer: presence.has(st.mediaItemId),
+      presence: presence.get(st.mediaItemId) ?? null,
     };
     if (isWatched) watched.push(summary);
     else watchlist.push(summary);
@@ -107,12 +114,12 @@ export interface MovieDetail {
   isFavorite: boolean;
   watched: boolean;
   watchedAt: Date | null; // latest watch date, or null if watched-but-undated / unwatched
-  inPlex: boolean; // present in the user's Plex library — the hero leads with Play (in Plex) vs Download (not)
-  plexRatingKey: string | null; // set when in Plex → deep-link to watch it
-  videoResolution: string | null; // source resolution of the Plex copy ("4k"|"1080"|…); null when not in Plex
-  hdrFormat: string | null; // combined HDR label of the Plex copy ("Dolby Vision · HDR10"|…); null = SDR / not in Plex
-  audioTracks: AudioTrack[]; // audio-row languages of the Plex copy; [] when not in Plex / unknown
-  subtitleLangs: string[]; // subtitle-row languages of the Plex copy; [] when not in Plex / unknown
+  onServer: boolean; // present in a connected server's library — the hero leads with Play vs Download (not)
+  presence: PresenceRef | null; // which server holds it + its key there → the watch deep link; null when on none
+  videoResolution: string | null; // source resolution of the copy ("4k"|"1080"|…); null when on no server
+  hdrFormat: string | null; // combined HDR label of the copy ("Dolby Vision · HDR10"|…); null = SDR / on no server
+  audioTracks: AudioTrack[]; // audio-row languages of the copy; [] when on no server / unknown
+  subtitleLangs: string[]; // subtitle-row languages of the copy; [] when on no server / unknown
 }
 
 export async function getMovieDetail(userId: string, idOrSlug: string): Promise<MovieDetail | null> {
@@ -123,13 +130,14 @@ export async function getMovieDetail(userId: string, idOrSlug: string): Promise<
   if (!item) return null;
   const movieId = item.id; // resolved id — the queries below key on it, not on the (possibly slug) route param
 
-  const [state, seen, plexPresence] = await Promise.all([
+  const onAnyServer = await isMediaServerEnabled();
+  const [state, seen, presence] = await Promise.all([
     prisma.userMediaState.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId: movieId } } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: movieId, episodeId: null },
       select: { watchedAt: true },
     }),
-    isPlexConfigured() ? getMoviePlexPresence(userId, movieId) : Promise.resolve(null),
+    onAnyServer ? getMoviePresence(userId, movieId) : Promise.resolve(null),
   ]);
 
   let watchedAt: Date | null = null;
@@ -152,11 +160,11 @@ export async function getMovieDetail(userId: string, idOrSlug: string): Promise<
     isFavorite: state?.isFavorite ?? false,
     watched: seen.length > 0,
     watchedAt,
-    inPlex: plexPresence != null,
-    plexRatingKey: plexPresence?.plexRatingKey ?? null,
-    videoResolution: plexPresence?.videoResolution ?? null,
-    hdrFormat: plexPresence?.hdrFormat ?? null,
-    audioTracks: plexPresence?.audioTracks ?? [],
-    subtitleLangs: plexPresence?.subtitleLangs ?? [],
+    onServer: presence != null,
+    presence: presence?.ref ?? null,
+    videoResolution: presence?.videoResolution ?? null,
+    hdrFormat: presence?.hdrFormat ?? null,
+    audioTracks: presence?.audioTracks ?? [],
+    subtitleLangs: presence?.subtitleLangs ?? [],
   };
 }

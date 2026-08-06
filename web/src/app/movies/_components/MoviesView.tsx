@@ -15,6 +15,7 @@ export type MovieCardData = {
   title: string;
   posterPath: string | null;
   watchUrl: string | null;
+  watchOn: string | null; // which server the play link opens, for the label
   rating: number | null;
   isFavorite: boolean;
   list: "watchlist" | "watched";
@@ -106,6 +107,7 @@ export function MoviesView({
                   posterPath={m.posterPath}
                   detailHref={`/movies/${m.slug ?? m.id}`}
                   watchUrl={m.watchUrl}
+                  watchOn={m.watchOn}
                   rating={m.rating}
                   isFavorite={m.isFavorite}
                   canFavorite={canFavorite}

@@ -1,8 +1,9 @@
 import { pluralWord, seconds } from "@/lib/format";
 
-// Structured summary of a Plex sync run: stat segments (number + label, styled separately in the UI) plus the
-// wall-clock duration, shown to the right of the "Synced <when>" heading. Single formatter so the card can't drift.
-export function plexSyncSummary(s: {
+// Structured summary of a media-server sync run: stat segments (number + label, styled separately in the UI) plus
+// the wall-clock duration, shown to the right of the "Synced <when>" heading. Single formatter so the Plex and
+// Jellyfin cards can't drift apart.
+export function syncSummary(s: {
   matchedShows: number;
   matchedMovies: number;
   presenceSeasons: number;

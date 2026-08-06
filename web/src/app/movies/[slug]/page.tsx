@@ -10,9 +10,9 @@ import { getPrisma } from "@/lib/db";
 import { downloadLinksFor } from "@/lib/downloadSources";
 import { formatRuntime } from "@/lib/format";
 import { getMovieDetail } from "@/lib/movies";
-import { formatAudio, formatResolution, formatSubtitles, isPlexConfigured, plexWatchUrl } from "@/lib/plex";
+import { formatAudio, formatResolution, formatSubtitles, getWatchLinker } from "@/lib/media";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
-import { getDownloadSources, getPlexServerId, isManualWatchedEnabled } from "@/lib/settings";
+import { getDownloadSources, isManualWatchedEnabled } from "@/lib/settings";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -27,10 +27,10 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const [sessionUser, displayedUser] = await Promise.all([getSessionUser(), getDisplayedUser()]);
   const { canEdit } = permissionsFor(sessionUser, displayedUser);
-  const [movie, manualWatched, plexServerId, sources] = await Promise.all([
+  const [movie, manualWatched, watchLink, sources] = await Promise.all([
     getMovieDetail(displayedUser.id, slug),
     isManualWatchedEnabled(),
-    isPlexConfigured() ? getPlexServerId() : Promise.resolve(null),
+    getWatchLinker(),
     getDownloadSources(),
   ]);
   if (!movie) notFound();
@@ -39,7 +39,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
 
   const year = movie.releaseDate ? movie.releaseDate.slice(0, 4) : "";
   const meta = [year, formatRuntime(movie.runtime)].filter(Boolean).join(" · ");
-  const watchUrl = movie.inPlex ? plexWatchUrl(plexServerId, movie.plexRatingKey) : null;
+  const watch = watchLink(movie.presence);
   const stars = movie.cast.slice(0, 3).map((c) => c.name).join(" · ");
   const watchedStamp = movie.watched
     ? `WATCHED${movie.watchedAt ? ` · ${displayMonthYear(movie.watchedAt).toUpperCase()}` : ""}`
@@ -47,11 +47,11 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
   const watchedTitle = movie.watched && movie.watchedAt ? displayDate(movie.watchedAt) : null;
   const downloadLinks = downloadLinksFor(sources, "movies", movie.title);
 
-  // Plex source spec rows (in-Plex movies only): resolution + HDR, audio-track languages, subtitle languages.
+  // Source spec rows (only for a movie you have): resolution + HDR, audio-track languages, subtitle languages.
   const video = [formatResolution(movie.videoResolution), movie.hdrFormat].filter(Boolean).join(" ");
   const audio = formatAudio(movie.audioTracks);
   const subtitles = formatSubtitles(movie.subtitleLangs);
-  const hasSource = movie.inPlex && (video || audio.text || subtitles.text);
+  const hasSource = movie.onServer && (video || audio.text || subtitles.text);
 
   const canMarkWatched = canEdit && manualWatched;
   // The ⋯ menu only appears when it would have an item: watched → "Mark unwatched"; unwatched → "Mark watched"
@@ -77,8 +77,9 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
             movieId={movie.id}
             title={movie.title}
             posterPath={movie.posterPath}
-            inPlex={movie.inPlex}
-            watchUrl={watchUrl}
+            onServer={movie.onServer}
+            watchUrl={watch?.url ?? null}
+            watchOn={watch?.server}
             downloadLinks={downloadLinks}
             rating={movie.imdbRating}
             isFavorite={movie.isFavorite}

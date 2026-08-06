@@ -1,8 +1,11 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 
-// Explicit "not watched" overrides (Plex integration). When the user unmarks a watch in the app, we record a
-// suppression so the Plex sync won't re-import that same watch (applyWatched skips suppressed signals). Marking it
-// watched again clears the suppression. episodeId null = the movie itself; set = a specific episode.
+// Explicit "not watched" overrides. When the user unmarks a watch in the app, we record a suppression so no
+// media-server sync re-imports that same watch (applyWatched skips suppressed signals). Marking it watched again
+// clears the suppression. episodeId null = the movie itself; set = a specific episode.
+//
+// Deliberately not per-provider: "I have not watched this" is a statement about the user, not about one server,
+// so a suppression holds against every connected server.
 
 // Record a suppression for an episode (episodeId set) or a movie (episodeId null). Idempotent.
 export async function suppressWatch(
@@ -12,7 +15,7 @@ export async function suppressWatch(
   episodeId: string | null,
 ): Promise<void> {
   if (episodeId != null) {
-    await prisma.plexWatchSuppression.upsert({
+    await prisma.watchSuppression.upsert({
       where: { userId_mediaItemId_episodeId: { userId, mediaItemId, episodeId } },
       create: { userId, mediaItemId, episodeId },
       update: {},
@@ -20,11 +23,11 @@ export async function suppressWatch(
     return;
   }
   // Movie: episodeId is null, which SQLite treats as distinct in the unique index, so upsert can't match — guard.
-  const exists = await prisma.plexWatchSuppression.findFirst({
+  const exists = await prisma.watchSuppression.findFirst({
     where: { userId, mediaItemId, episodeId: null },
     select: { id: true },
   });
-  if (!exists) await prisma.plexWatchSuppression.create({ data: { userId, mediaItemId, episodeId: null } });
+  if (!exists) await prisma.watchSuppression.create({ data: { userId, mediaItemId, episodeId: null } });
 }
 
 // Drop suppressions for these episodes (the user re-marked them watched). No-op on an empty list.
@@ -34,10 +37,10 @@ export async function clearEpisodeSuppressions(
   episodeIds: string[],
 ): Promise<void> {
   if (episodeIds.length === 0) return;
-  await prisma.plexWatchSuppression.deleteMany({ where: { userId, episodeId: { in: episodeIds } } });
+  await prisma.watchSuppression.deleteMany({ where: { userId, episodeId: { in: episodeIds } } });
 }
 
 // Drop a movie's suppression (the user re-marked it watched).
 export async function clearMovieSuppression(prisma: PrismaClient, userId: string, mediaItemId: string): Promise<void> {
-  await prisma.plexWatchSuppression.deleteMany({ where: { userId, mediaItemId, episodeId: null } });
+  await prisma.watchSuppression.deleteMany({ where: { userId, mediaItemId, episodeId: null } });
 }

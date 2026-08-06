@@ -28,15 +28,19 @@ export async function register(): Promise<void> {
         console.log(
           `[nightly] refreshed tv=${r.tvRefreshed} movies=${r.moviesRefreshed} errors=${r.errors} in ${r.durationMs}ms; backup ok=${b.ok} pruned=${b.prunedCount}`,
         );
-        // Refresh Plex presence badges (presence only — never auto-adds titles).
-        const { isPlexConfigured, syncPlexPresence } = await import("@/lib/plex");
-        if (isPlexConfigured()) {
+        // Refresh media-server presence badges (presence only — never auto-adds titles). Every connected server
+        // is synced; one failing doesn't stop the others (syncMediaServers collects failures rather than throwing).
+        const { isMediaServerEnabled, syncMediaServers } = await import("@/lib/media");
+        if (await isMediaServerEnabled()) {
           const { getOwner } = await import("@/lib/owner");
           const owner = await getOwner();
-          const p = await syncPlexPresence(owner.id, "cron");
-          console.log(
-            `[nightly] plex: ${p.matchedShows} shows, ${p.matchedMovies} movies, ${p.presenceSeasons} seasons marked, ${p.importedWatches} watches imported in ${p.durationMs}ms`,
-          );
+          const { results, failures } = await syncMediaServers(owner.id, "cron");
+          for (const p of results) {
+            console.log(
+              `[nightly] ${p.provider}: ${p.matchedShows} shows, ${p.matchedMovies} movies, ${p.presenceSeasons} seasons marked, ${p.importedWatches} watches imported in ${p.durationMs}ms`,
+            );
+          }
+          for (const f of failures) console.error(`[nightly] ${f.provider} sync failed: ${f.error}`);
         }
       } catch (e) {
         console.error("[nightly] failed:", e);

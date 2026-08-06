@@ -15,6 +15,7 @@ export type ShowCardData = {
   title: string;
   posterPath: string | null;
   watchUrl: string | null;
+  watchOn: string | null; // which server the play link opens, for the label
   rating: number | null;
   isFavorite: boolean;
   group: "behind" | "up-to-date" | "planned" | "finished" | "stopped";
@@ -80,6 +81,7 @@ export function ShowsView({ shows, canFavorite }: { shows: ShowCardData[]; canFa
                   posterPath={s.posterPath}
                   detailHref={`/shows/${s.slug ?? s.id}`}
                   watchUrl={s.watchUrl}
+                  watchOn={s.watchOn}
                   rating={s.rating}
                   isFavorite={s.isFavorite}
                   canFavorite={canFavorite}

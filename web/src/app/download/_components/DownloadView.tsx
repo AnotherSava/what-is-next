@@ -75,7 +75,7 @@ export function DownloadView({
 
       {view.length === 0 ? (
         <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-muted)]">
-          Nothing to download — everything you&rsquo;re tracking is already in your Plex library.
+          Nothing to download — everything you&rsquo;re tracking is already in your library.
         </div>
       ) : (
         view.map((s) => (

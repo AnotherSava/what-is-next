@@ -1,8 +1,8 @@
 import { Poster } from "./Poster";
 
-// A poster that acts as a single "watch in Plex" play button. When `watchUrl` is set, the ENTIRE poster is the
-// click target: hovering (or focusing) zooms the artwork, dims it evenly, and reveals a large centred play
-// triangle, then opens the item in the Plex web app. With no `watchUrl` it's a plain, inert poster.
+// A poster that acts as a single "watch it" play button. When `watchUrl` is set, the ENTIRE poster is the click
+// target: hovering (or focusing) zooms the artwork, dims it evenly, and reveals a large centred play triangle,
+// then opens the item in that media server's web app. With no `watchUrl` it's a plain, inert poster.
 // (Design: docs "Interactive play button design v2" — Option 1e/2c, zoom + big triangle on a dark scrim.)
 export function PosterPlay({
   path,
@@ -11,6 +11,7 @@ export function PosterPlay({
   height,
   size,
   watchUrl,
+  watchOn,
   className = "",
 }: {
   path: string | null | undefined;
@@ -19,6 +20,7 @@ export function PosterPlay({
   height: number;
   size?: string;
   watchUrl?: string | null;
+  watchOn?: string | null; // which server the play link opens ("Plex" | "Jellyfin"), for the label
   className?: string;
 }) {
   // No stream link → plain poster, unchanged.
@@ -35,8 +37,8 @@ export function PosterPlay({
       href={watchUrl}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Play ${alt} in Plex`}
-      aria-label={`Play ${alt} in Plex`}
+      title={watchOn ? `Play ${alt} in ${watchOn}` : `Play ${alt}`}
+      aria-label={watchOn ? `Play ${alt} in ${watchOn}` : `Play ${alt}`}
       className={`group relative block shrink-0 overflow-hidden rounded-lg leading-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] ${className}`}
       style={{ width, height }}
     >

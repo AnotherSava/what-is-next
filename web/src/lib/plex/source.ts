@@ -1,46 +1,45 @@
+import {
+  collectAudioTracks,
+  collectLangs,
+  EMPTY_SOURCE,
+  resolutionRank,
+  resolveLanguage,
+  type VideoSource,
+} from "@/lib/media/source";
 import type { PlexMedia } from "./schemas";
 
-// Derive a movie's display "source" from its Plex Media — resolution + HDR, plus audio-track and subtitle
-// languages — for the movie page's Video / Audio / Subtitles spec rows. Pure and dependency-free (testable).
-
-export interface AudioTrack {
-  lang: string; // human language name (Plex-embedded, may be native script e.g. "Русский") — for display
-  code: string | null; // primary ISO 639-1 subtag ("en"|"ru"|…), normalized from Plex's tag (e.g. "en-US" → "en"); null when untagged
-  atmos: boolean; // Dolby Atmos present on any track of this language
-}
-export interface VideoSource {
-  videoResolution: string | null; // raw Plex token: "4k" | "1080" | …; null = unknown
-  hdrFormat: string | null; // combined label: "Dolby Vision · HDR10" | "HDR10" | "HLG"; null = SDR / unknown
-  audioTracks: AudioTrack[]; // distinct audio languages, in track order
-  subtitleLangs: string[]; // distinct subtitle languages, in track order
-}
-
-const EMPTY: VideoSource = { videoResolution: null, hdrFormat: null, audioTracks: [], subtitleLangs: [] };
-
-const RES_RANK: Record<string, number> = { "8k": 5, "4k": 4, "1080": 3, "720": 2, "480": 1, sd: 0 };
+// Derive a copy's display source from its Plex Media — resolution + HDR, plus audio-track and subtitle languages
+// — for the movie page's Video / Audio / Subtitles spec rows and the show page's per-season media pill. Pure and
+// dependency-free (testable). The provider-neutral shape and the display formatters live in lib/media/source.
 
 // A movie can carry multiple Media (a 1080p and a 4K copy, or a 4K DV and a 4K SDR copy). Surface the best one:
 // highest pixel height, then resolution token, then HDR — so among equal-resolution copies the Dolby Vision / HDR
 // one wins rather than whichever Plex happened to list first. Audio + subtitles come from that same best copy.
 export function deriveVideoSource(media: PlexMedia[] | null | undefined): VideoSource {
-  if (!media || media.length === 0) return EMPTY;
+  if (!media || media.length === 0) return EMPTY_SOURCE;
   const best = [...media].sort(
     (a, b) =>
       (b.height ?? 0) - (a.height ?? 0) ||
-      rankOf(b.videoResolution) - rankOf(a.videoResolution) ||
+      resolutionRank(b.videoResolution) - resolutionRank(a.videoResolution) ||
       hdrRankOf(b) - hdrRankOf(a),
   )[0];
   const streams = (best.Part ?? []).flatMap((p) => p.Stream ?? []);
   return {
     videoResolution: best.videoResolution ?? null,
     hdrFormat: hdrLabel(streams.find((s) => s.streamType === 1)),
-    audioTracks: audioTracksFrom(streams.filter((s) => s.streamType === 2)),
-    subtitleLangs: langsFrom(streams.filter((s) => s.streamType === 3)),
+    audioTracks: collectAudioTracks(
+      streams
+        .filter((s) => s.streamType === 2)
+        .map((s) => ({
+          // Plex embeds its own display name for the language (often in the native script, e.g. "Русский"); keep
+          // it, and take only the matchable ISO code from the tag.
+          lang: (s.language ?? "").trim(),
+          code: resolveLanguage(s.languageTag).code,
+          atmos: /atmos/i.test(`${s.title ?? ""} ${s.displayTitle ?? ""} ${s.extendedDisplayTitle ?? ""}`),
+        })),
+    ),
+    subtitleLangs: collectLangs(streams.filter((s) => s.streamType === 3).map((s) => s.language)),
   };
-}
-
-function rankOf(res: string | null | undefined): number {
-  return res ? (RES_RANK[res.toLowerCase()] ?? 0) : 0;
 }
 
 type Stream = NonNullable<NonNullable<PlexMedia["Part"]>[number]["Stream"]>[number];
@@ -64,54 +63,4 @@ function hdrRankOf(m: PlexMedia): number {
   if (v.colorTrc === "smpte2084") return 2;
   if (v.colorTrc === "arib-std-b67") return 1;
   return 0;
-}
-
-// Distinct audio languages in track order, flagging any that carries a Dolby Atmos track. Tracks with no language
-// are skipped (they'd show as blank).
-function audioTracksFrom(streams: Stream[]): AudioTrack[] {
-  const out: AudioTrack[] = [];
-  for (const s of streams) {
-    const lang = (s.language ?? "").trim();
-    if (!lang) continue;
-    // Plex tags can be BCP-47 ("en-US"|"pt-BR"|…); keep only the primary subtag so it matches a bare ISO-639-1 original.
-    const code = (s.languageTag ?? "").trim().split("-")[0].toLowerCase() || null;
-    const atmos = /atmos/i.test(`${s.title ?? ""} ${s.displayTitle ?? ""} ${s.extendedDisplayTitle ?? ""}`);
-    const existing = out.find((a) => a.lang === lang);
-    if (existing) {
-      existing.atmos = existing.atmos || atmos;
-      existing.code = existing.code ?? code; // a later same-name track may carry the tag an earlier one lacked
-    } else out.push({ lang, code, atmos });
-  }
-  return out;
-}
-
-// Distinct languages in track order (subtitles).
-function langsFrom(streams: Stream[]): string[] {
-  const out: string[] = [];
-  for (const s of streams) {
-    const lang = (s.language ?? "").trim();
-    if (lang && !out.includes(lang)) out.push(lang);
-  }
-  return out;
-}
-
-// Display label for a raw Plex resolution token: "4k" → "4K", "1080" → "1080p", "sd" → "SD"; blank/unknown → "".
-export function formatResolution(raw: string | null | undefined): string {
-  if (!raw) return "";
-  const r = raw.toLowerCase();
-  if (r === "sd") return "SD";
-  if (/^\d+k$/.test(r)) return r.toUpperCase(); // 4k → 4K, 8k → 8K
-  if (/^\d+$/.test(r)) return `${r}p`; // 1080 → 1080p
-  return raw.toUpperCase();
-}
-
-// The Audio spec row: up to `max` languages ("(Atmos)" noted), plus a count of the rest for a dim "+N more" suffix.
-export function formatAudio(tracks: AudioTrack[], max = 4): { text: string; more: number } {
-  const shown = tracks.slice(0, max).map((t) => (t.atmos ? `${t.lang} (Atmos)` : t.lang));
-  return { text: shown.join(" · "), more: Math.max(0, tracks.length - max) };
-}
-
-// The Subtitles spec row: up to `max` languages, plus a count of the rest for a dim "+N more" suffix.
-export function formatSubtitles(langs: string[], max = 3): { text: string; more: number } {
-  return { text: langs.slice(0, max).join(" · "), more: Math.max(0, langs.length - max) };
 }

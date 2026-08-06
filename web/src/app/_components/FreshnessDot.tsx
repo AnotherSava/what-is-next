@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Freshness of the Plex-synced watch data the page is showing, driven by the last sync time:
+// Freshness of the synced watch data the page is showing, driven by the last sync time:
 //   • green  — synced within the last 1.5 min (up to date; an open tab re-syncs ~every minute, so it stays green)
 //   • yellow — older than that
 //   • red    — older than the stale threshold (3× the general sync window; genuinely behind)
@@ -30,7 +30,7 @@ const COLOR: Record<Freshness, string> = {
 const TITLE: Record<Freshness, string> = {
   fresh: "Up to date — recently synced",
   aging: "Synced a few minutes ago",
-  stale: "Stale — no Plex sync in a while",
+  stale: "Stale — no sync in a while",
 };
 
 const LABEL: Record<Freshness, string> = {

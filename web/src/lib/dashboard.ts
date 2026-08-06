@@ -1,14 +1,14 @@
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
 import { getMovies } from "@/lib/movies";
-import { getPlexEpisodePresence, isPlexConfigured } from "@/lib/plex";
+import { getPlayableEpisodeRefs, isMediaServerEnabled, type PresenceRef } from "@/lib/media";
 import { getFollowedShows } from "@/lib/shows";
 
-// Data for the "Watch next" home dashboard (brief §8.1): what you can play right now from Plex — unwatched
-// watchlist movies that are in your library, plus behind shows whose NEXT-UP episode is in your library. (Behind
-// shows whose next episode isn't in Plex belong to the Download view, not here.) Explicit userId (§5a rule 1).
+// Data for the "Watch next" home dashboard (brief §8.1): what you can play right now from a connected media
+// server — unwatched watchlist movies that are in your library, plus behind shows whose NEXT-UP episode is in it.
+// (Behind shows whose next episode you don't have belong to the Download view, not here.) Explicit userId (§5a rule 1).
 
-// A watchlist movie present in Plex — playable right now (the Movies column of "Watch next").
+// A watchlist movie you already have — playable right now (the Movies column of "Watch next").
 export interface ReadyMovie {
   movieId: string;
   slug: string | null; // URL slug for the detail link (falls back to movieId when unset)
@@ -21,7 +21,7 @@ export interface ReadyMovie {
   director: string | null; // director(s), comma-joined — rendered under the title
   runtime: number | null; // minutes — rendered as "2h 46m" on the card
   isFavorite: boolean;
-  plexRatingKey: string | null; // set when in Plex → deep-link to watch it (null if presence predates capture)
+  presence: PresenceRef | null; // which server holds it + its key there → the watch deep link
 }
 
 export interface BehindShow {
@@ -34,25 +34,25 @@ export interface BehindShow {
   imdbRating: number | null; // IMDb community score (0–10) — rendered on the card
   imdbId: string | null; // IMDb id (tt-prefixed) → links the IMDB rating to its imdb.com page
   unwatchedAiredCount: number;
-  nextUpInPlex: boolean; // the NEXT-UP episode is in the user's Plex library → can be played right now
-  plexRatingKey: string | null; // the show's Plex ratingKey → deep-link to watch it (set when the show is in Plex)
+  nextUpReady: boolean; // the NEXT-UP episode is in a connected server's library → can be played right now
+  presence: PresenceRef | null; // the server that holds THAT episode + its key there → the watch deep link
   lastWatchedAt: Date | null; // when an episode was last watched (any source), or null if all watches are undated
   nextUp: { episodeId: string; seasonNumber: number; episodeNumber: number; title: string | null };
 }
 
 export interface Dashboard {
-  readyMovies: ReadyMovie[]; // unwatched watchlist movies present in Plex — playable right now (recently added first)
-  readyInPlex: BehindShow[]; // behind shows you can watch right now — their next-up episode is in your Plex library
+  readyMovies: ReadyMovie[]; // unwatched watchlist movies you already have — playable right now (recently added first)
+  readyShows: BehindShow[]; // behind shows you can watch right now — their next-up episode is in your library
 }
 
 export async function getDashboard(userId: string, today: string = todayISO()): Promise<Dashboard> {
   const prisma = getPrisma();
   const [shows, movies] = await Promise.all([getFollowedShows(userId, today), getMovies(userId)]);
 
-  // Movies column: watchlist (unwatched) titles that are in the user's Plex library. Keeps getMovies' watchlist
-  // order (most recently added first).
+  // Movies column: watchlist (unwatched) titles that are in a connected server's library. Keeps getMovies'
+  // watchlist order (most recently added first).
   const readyMovies: ReadyMovie[] = movies.watchlist
-    .filter((m) => m.inPlex)
+    .filter((m) => m.onServer)
     .map((m) => ({
       movieId: m.id,
       slug: m.slug,
@@ -65,7 +65,7 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       director: m.director,
       runtime: m.runtime,
       isFavorite: m.isFavorite,
-      plexRatingKey: m.plexRatingKey,
+      presence: m.presence,
     }));
 
   const behindShows = shows.filter((s) => s.group === "behind" && s.progress.nextUp);
@@ -73,14 +73,16 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
   // watch time per behind show — it orders "Watch right now" and shows an "N ago" age on each card.
   const nextIds = behindShows.map((s) => s.progress.nextUp!.id);
   const behindIds = behindShows.map((s) => s.id);
-  const [nextEps, watchRows, plexEpisodeIds] = await Promise.all([
+  const onAnyServer = await isMediaServerEnabled();
+  const [nextEps, watchRows, playable] = await Promise.all([
     prisma.episode.findMany({ where: { id: { in: nextIds } }, select: { id: true, title: true } }),
     prisma.seenEvent.findMany({
       where: { userId, mediaItemId: { in: behindIds }, episodeId: { not: null } },
       select: { mediaItemId: true, watchedAt: true },
     }),
-    // Per-episode Plex presence: "Watch right now" is gated on the NEXT-UP episode being present, not the show.
-    isPlexConfigured() ? getPlexEpisodePresence(userId) : Promise.resolve(new Set<string>()),
+    // Per-episode presence: "Watch right now" is gated on the NEXT-UP episode being present, not the show — and
+    // the play link must open the server holding THAT episode, which isn't necessarily the one holding the show.
+    onAnyServer ? getPlayableEpisodeRefs(userId, nextIds) : Promise.resolve(new Map<string, PresenceRef>()),
   ]);
   const titleById = new Map(nextEps.map((e) => [e.id, e.title]));
   // Latest watchedAt (epoch ms) per show; a show whose watches are all undated sinks to the bottom (-Infinity).
@@ -105,8 +107,8 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       imdbRating: s.imdbRating,
       imdbId: s.imdbId,
       unwatchedAiredCount: s.progress.unwatchedAiredCount,
-      nextUpInPlex: plexEpisodeIds.has(n.id),
-      plexRatingKey: s.plexRatingKey,
+      nextUpReady: playable.has(n.id),
+      presence: playable.get(n.id) ?? null,
       lastWatchedAt: ms != null ? new Date(ms) : null,
       nextUp: {
         episodeId: n.id,
@@ -116,11 +118,11 @@ export async function getDashboard(userId: string, today: string = todayISO()): 
       },
     };
   });
-  // "Watch right now" (next-up episode is in Plex) leads with the show you watched most recently. Behind shows
-  // whose next episode isn't in Plex are intentionally omitted here — they live in the Download view.
-  const readyInPlex = behindAll
-    .filter((b) => b.nextUpInPlex)
+  // "Watch right now" (next-up episode is on a server) leads with the show you watched most recently. Behind
+  // shows whose next episode you don't have are intentionally omitted here — they live in the Download view.
+  const readyShows = behindAll
+    .filter((b) => b.nextUpReady)
     .sort((a, b) => lastWatch(b.showId) - lastWatch(a.showId) || a.title.localeCompare(b.title));
 
-  return { readyMovies, readyInPlex };
+  return { readyMovies, readyShows };
 }

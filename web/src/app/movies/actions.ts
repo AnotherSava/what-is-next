@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getPrisma } from "@/lib/db";
-import { clearMovieSuppression, suppressWatch } from "@/lib/plex";
+import { clearMovieSuppression, suppressWatch } from "@/lib/media";
 import { requireOwner } from "@/lib/session";
 
 // Mutations for /movies (brief §8.4). Owner-gated. A movie watch is a SeenEvent with episodeId null; "watched"

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { todayISO } from "@/lib/datetime";
 import { getPrisma } from "@/lib/db";
-import { clearEpisodeSuppressions, suppressWatch } from "@/lib/plex";
+import { clearEpisodeSuppressions, suppressWatch } from "@/lib/media";
 import { hasAired } from "@/lib/progress";
 import { requireOwner } from "@/lib/session";
 

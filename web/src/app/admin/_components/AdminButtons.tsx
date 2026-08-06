@@ -7,11 +7,6 @@ import { backupNow } from "../actions";
 import { JOB_BUTTON_CLASS, JOB_BUTTON_STYLE } from "./buttonStyle";
 import { FreshnessBadge } from "./FreshnessBadge";
 
-// The status dot that sits inside each job's "run now" button (green = up to date, amber = needs attention).
-function Dot({ color }: { color: string }) {
-  return <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: color }} aria-hidden />;
-}
-
 // Small owner-console action buttons. Refresh streams live progress from /api/admin/refresh (NDJSON) into a
 // determinate bar; backup stays a plain server action. `lastRun` is the server-rendered summary shown when idle.
 
@@ -21,13 +16,11 @@ type RefreshMessage =
   | { type: "error"; message: string };
 
 export function RefreshNowButton({
-  dotColor,
   freshness,
   freshnessColor,
   freshnessTitle,
   result,
 }: {
-  dotColor: string;
   freshness: string;
   freshnessColor: string;
   freshnessTitle?: string;
@@ -82,7 +75,6 @@ export function RefreshNowButton({
           long episode titles can't shove the status around. */}
       <div className="flex items-center justify-between gap-3">
         <button type="button" disabled={running} onClick={run} className={JOB_BUTTON_CLASS} style={JOB_BUTTON_STYLE}>
-          <Dot color={dotColor} />
           {running ? "Refreshing…" : "Refresh now"}
         </button>
         <FreshnessBadge text={freshness} color={freshnessColor} title={freshnessTitle} />
@@ -185,13 +177,11 @@ export function SettingToggle({
 }
 
 export function BackupNowButton({
-  dotColor,
   freshness,
   freshnessColor,
   freshnessTitle,
   result,
 }: {
-  dotColor: string;
   freshness: string;
   freshnessColor: string;
   freshnessTitle?: string;
@@ -209,7 +199,6 @@ export function BackupNowButton({
           className={JOB_BUTTON_CLASS}
           style={JOB_BUTTON_STYLE}
         >
-          <Dot color={dotColor} />
           {pending ? "Backing up…" : "Back up now"}
         </button>
         <FreshnessBadge text={freshness} color={freshnessColor} title={freshnessTitle} />

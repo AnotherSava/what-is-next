@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { deriveVideoSource, formatAudio, formatResolution, formatSubtitles } from "./source";
+import { formatAudio, formatResolution, formatSubtitles } from "@/lib/media/source";
+import { deriveVideoSource } from "./source";
 
 // A Plex Media entry with a single video stream carrying the given colour fields.
 const vid = (videoResolution: string, height: number, video: { colorTrc?: string; DOVIPresent?: boolean } = {}) => ({

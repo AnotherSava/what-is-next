@@ -65,15 +65,15 @@ model MediaItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  seasons         Season[]
-  episodes        Episode[]
-  userState       UserMediaState[]
-  seen            SeenEvent[]
-  listItems       ListItem[]
-  ratings         Rating[]
-  plexPresence    PlexPresence[]
-  plexEpisodes    PlexEpisodePresence[]
-  plexSuppression PlexWatchSuppression[]
+  seasons          Season[]
+  episodes         Episode[]
+  userState        UserMediaState[]
+  seen             SeenEvent[]
+  listItems        ListItem[]
+  ratings          Rating[]
+  presence         MediaPresence[]
+  episodePresence  MediaEpisodePresence[]
+  watchSuppression WatchSuppression[]
 
   @@unique([tvdbId, mediaType]) // TVDB numbers movies and series independently
   @@unique([tmdbId, mediaType]) // TMDB likewise — see Deviation 1 at the top of this file
@@ -118,11 +118,11 @@ model Episode {
   tvdbId        Int? // kept from import — allows re-matching if TMDB mapping was wrong
   imdbId        String?
 
-  seen            SeenEvent[]
-  listItems       ListItem[]
-  ratings         Rating[]
-  plexPresence    PlexEpisodePresence[]
-  plexSuppression PlexWatchSuppression[]
+  seen             SeenEvent[]
+  listItems        ListItem[]
+  ratings          Rating[]
+  presence         MediaEpisodePresence[]
+  watchSuppression WatchSuppression[]
 
   @@unique([mediaItemId, seasonNumber, episodeNumber])
   @@index([mediaItemId, releaseDate])
@@ -140,13 +140,13 @@ model User {
   //                                        The seed sets the sole v1 owner's role explicitly.
   createdAt DateTime @default(now())
 
-  states          UserMediaState[]
-  seen            SeenEvent[]
-  lists           List[]
-  ratings         Rating[]
-  plexPresence    PlexPresence[]
-  plexEpisodes    PlexEpisodePresence[]
-  plexSuppression PlexWatchSuppression[]
+  states           UserMediaState[]
+  seen             SeenEvent[]
+  lists            List[]
+  ratings          Rating[]
+  presence         MediaPresence[]
+  episodePresence  MediaEpisodePresence[]
+  watchSuppression WatchSuppression[]
 }
 
 model UserMediaState {
@@ -180,9 +180,10 @@ model SeenEvent {
   episodeId   String?
   episode     Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  watchedAt DateTime? // null = "seen, date unknown" — WHEN it was watched (from Plex/TV Time; may predate the fetch)
-  source    String    @default("app") // "app" | "tvtime-import" | "plex"
-  createdAt DateTime  @default(now()) // WHEN the row was logged — i.e. import/fetch time. Drives the Plex watch feed.
+  watchedAt DateTime? // null = "seen, date unknown" — WHEN it was watched (from a media server / TV Time; may predate the fetch)
+  source    String    @default("app") // "app" | "tvtime-import" | "plex" | "jellyfin" — a media-server import
+  //                                     stamps the provider name, so the log records which server reported it.
+  createdAt DateTime  @default(now()) // WHEN the row was logged — i.e. import/fetch time. Drives the watch feed.
 
   @@index([userId, mediaItemId])
   @@index([episodeId])
@@ -238,42 +239,47 @@ model ListItem {
   @@unique([listId, mediaItemId, episodeId])
 }
 
-// Which of the user's tracked catalog items are present in their Plex library (Plex integration). Per-user
-// (§5a rule 4 — Plex is the user's own library, not shared catalog state). seasonNumber null = a movie, or
-// show-level presence; rows with seasonNumber mark which TV seasons are present. A sync REPLACES the whole set
-// for the user (deleteMany + createMany), so there's no upsert/null-unique concern.
-model PlexPresence {
+// Which of the user's tracked catalog items are present in a connected media server's library (media-server
+// integration). Per-user (§5a rule 4 — the library is the user's own, not shared catalog state) and per-provider:
+// Plex and Jellyfin can both be connected, and each owns its own rows. seasonNumber null = a movie, or show-level
+// presence; rows with seasonNumber mark which TV seasons are present. A sync REPLACES the whole set for one
+// (user, provider) pair (deleteMany + createMany scoped by provider, so one server's sync never touches the
+// other's rows), which is why there's no upsert/null-unique concern.
+model MediaPresence {
   id              String    @id @default(cuid())
+  provider        String    @default("plex") // "plex" | "jellyfin" — which server this row came from
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mediaItemId     String
   mediaItem       MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-  seasonNumber    Int? // null = movie / show-level; set = a specific TV season present in Plex
-  plexRatingKey   String? // the item's Plex ratingKey (the show/movie, not the season) — used to deep-link into
-  //                        Plex to watch it. Same value on every row of a show; null on rows written before this
-  //                        column existed, until the next sync back-fills them.
-  videoResolution String? // movie source resolution from Plex ("4k"|"1080"|…); null for shows/seasons or unknown.
-  //                          Populated per matched movie each sync (see sync.ts deriveVideoSource); movie page rows.
-  hdrFormat       String? // movie HDR format, combined: "Dolby Vision · HDR10" | "HDR10" | "HLG"; null = SDR. Movies only.
+  seasonNumber    Int? // null = movie / show-level; set = a specific TV season present in the library
+  itemKey         String? // the item's id ON THAT SERVER (Plex ratingKey / Jellyfin item id) — for the show/movie,
+  //                         not the season — used to deep-link into the server to watch it. Same value on every
+  //                         row of a show; null on rows written before this column existed, until the next sync
+  //                         back-fills them.
+  videoResolution String? // source resolution, as a Plex-style token ("4k"|"1080"|…); null when unknown. Set per
+  //                         matched movie and per TV season each sync (see each provider's source.ts).
+  hdrFormat       String? // HDR format, combined: "Dolby Vision · HDR10" | "HDR10" | "HLG"; null = SDR/unknown.
   audioTracks     String? // audio languages as JSON [{lang,code,atmos}] (best copy, in track order); movie + per-season rows.
   subtitleLangs   String? // subtitle languages as JSON string[] (best copy, in track order); movie + per-season rows.
   updatedAt       DateTime  @updatedAt
 
   @@index([userId, mediaItemId])
-  @@index([userId])
+  @@index([userId, provider])
 }
 
-// Which specific episodes of a tracked show are present in the user's Plex library (Plex integration). Finer
-// grained than PlexPresence, which is per-season: the Download view needs to know exactly which aired episodes
-// you don't yet have — including new episodes missing from a season you already partly own, which season-level
-// presence can't distinguish. Per-user (§5a rule 4 — the user's own library, not shared catalog state).
+// Which specific episodes of a tracked show are present in a connected media server's library (media-server
+// integration). Finer grained than MediaPresence, which is per-season: the Download view needs to know exactly
+// which aired episodes you don't yet have — including new episodes missing from a season you already partly own,
+// which season-level presence can't distinguish. Per-user (§5a rule 4) and per-provider, like MediaPresence.
 //
-// Updated incrementally, unlike PlexPresence's full snapshot: a sync only fetches a show's episode list when its
-// Plex leafCount changed (see scanPlex's presence cursor), so it REPLACES rows only for the shows it re-fetched
-// and drops rows for shows no longer in the library; untouched shows keep their rows. mediaItemId is denormalized
-// so a show's rows can be replaced/queried without a join.
-model PlexEpisodePresence {
+// Updated incrementally, unlike MediaPresence's full snapshot: a sync only fetches a show's episode list when its
+// episode count changed (see each scanner's presence cursor), so it REPLACES rows only for the shows it re-fetched
+// and drops rows for shows no longer in that server's library; untouched shows keep their rows. mediaItemId is
+// denormalized so a show's rows can be replaced/queried without a join.
+model MediaEpisodePresence {
   id          String    @id @default(cuid())
+  provider    String    @default("plex") // "plex" | "jellyfin"
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mediaItemId String
@@ -282,15 +288,17 @@ model PlexEpisodePresence {
   episode     Episode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   updatedAt   DateTime  @updatedAt
 
-  @@unique([userId, episodeId])
+  @@unique([userId, provider, episodeId]) // one row per episode PER SERVER — the same episode can be in both
   @@index([userId, mediaItemId])
-  @@index([userId])
+  @@index([userId, provider])
 }
 
-// A user's explicit "not watched" override (Plex integration). Written when the user unmarks a watch in the app;
-// blocks the Plex sync from re-importing that same watch (applyWatched skips suppressed signals). Cleared when
-// the user marks it watched again. episodeId null = the movie itself; set = a specific episode.
-model PlexWatchSuppression {
+// A user's explicit "not watched" override (media-server integration). Written when the user unmarks a watch in
+// the app; blocks a sync from re-importing that same watch (applyWatched skips suppressed signals). Deliberately
+// NOT per-provider: unmarking in the app means "I have not watched this", so it must hold against every connected
+// server, not just the one that reported it. Cleared when the user marks it watched again. episodeId null = the
+// movie itself; set = a specific episode.
+model WatchSuppression {
   id          String    @id @default(cuid())
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -304,8 +312,8 @@ model PlexWatchSuppression {
   @@index([userId, mediaItemId])
 }
 
-// Key-value store for app config + job bookkeeping (refresh/backup/import summaries, Plex sync state).
-// JSON-encoded values, typed access via src/lib/settings.ts (printlab pattern).
+// Key-value store for app config + job bookkeeping (refresh/backup/import summaries, media-server connection
+// settings and sync state). JSON-encoded values, typed access via src/lib/settings.ts (printlab pattern).
 model Setting {
   key       String   @id
   value     String
