@@ -154,14 +154,12 @@ export async function syncMediaServers(
 
 // Freshness window for the on-view freshener: it re-syncs — on open, on tab focus, and on a periodic poll while a
 // tab stays open — only if the last sync is older than this. Also the basis for the header dot's "stale" (red)
-// threshold (3× this). Override with MEDIA_VIEW_TTL_SECONDS (PLEX_VIEW_TTL_SECONDS is still honoured, from when
-// Plex was the only integration). Default 1 min, so an open page stays ~1 min fresh and opening a page that's
-// fallen behind re-syncs right away.
+// threshold (3× this). Override with MEDIA_VIEW_TTL_SECONDS. Default 1 min, so an open page stays ~1 min fresh
+// and opening a page that's fallen behind re-syncs right away.
 const DEFAULT_VIEW_TTL_MS = 60 * 1000;
 
 export function viewSyncTtlMs(): number {
-  const raw = process.env.MEDIA_VIEW_TTL_SECONDS ?? process.env.PLEX_VIEW_TTL_SECONDS;
-  const secs = Number(raw);
+  const secs = Number(process.env.MEDIA_VIEW_TTL_SECONDS);
   return Number.isFinite(secs) && secs >= 0 ? secs * 1000 : DEFAULT_VIEW_TTL_MS;
 }
 
