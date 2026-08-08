@@ -463,7 +463,44 @@ input::placeholder {
   transform: rotate(45deg);
 }
 
-/* Disclosure chevron (Settings refresh-errors list): a right-pointing chevron when collapsed, swapped for a
+/* Inline help toggle — the "What each field does" control that ends a Settings section's one-line description.
+   A neutral soft-fill pill so it reads as a control rather than as more of the sentence it sits beside, plus the
+   disclosure chevron that marks it as an expander (the same shape vocabulary as the rest of the app: a toggle
+   carries a chevron, never an underline). Deliberately quieter than .wn-btn, which is for actions that DO
+   something. It lives inside a <summary> whose pointer-events are off, so this pill is the only click target on
+   the line; the focus ring is driven off the summary since that's what actually takes keyboard focus. */
+.wn-helptoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3.5px 8px;
+  border-radius: 7px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.wn-helptoggle:hover {
+  border-color: #3a3a44;
+  color: var(--color-text);
+}
+summary:focus-visible {
+  outline: none;
+}
+summary:focus-visible .wn-helptoggle {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Disclosure chevron (Settings — the refresh-errors list and the download-source field help, both via the shared
+   DisclosureChevron): a right-pointing chevron when collapsed, swapped for a
    down-pointing one when its <details> is open. Driven by the [open] attribute (no :open pseudo dependency),
    and by display-swap rather than a CSS transform (transforms on inline SVG proved unreliable here). */
 details[open] > summary .wn-disc-collapsed {

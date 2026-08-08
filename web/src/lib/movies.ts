@@ -17,6 +17,8 @@ export interface MovieSummary {
   id: string;
   slug: string | null; // URL slug for the detail link (falls back to id when unset)
   title: string;
+  originalTitle: string | null; // native title — the query for a download source that searches in that language
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); which language originalTitle is in
   posterPath: string | null;
   releaseDate: string | null;
   tmdbId: number | null;
@@ -73,6 +75,8 @@ export async function getMovies(userId: string): Promise<MoviesView> {
       id: st.mediaItem.id,
       slug: st.mediaItem.slug,
       title: st.mediaItem.title,
+      originalTitle: st.mediaItem.originalTitle,
+      originalLanguage: st.mediaItem.originalLanguage,
       posterPath: st.mediaItem.posterPath,
       releaseDate: st.mediaItem.releaseDate,
       tmdbId: st.mediaItem.tmdbId,
@@ -102,6 +106,7 @@ export interface MovieDetail {
   slug: string | null; // canonical URL slug; the page redirects an id-based URL to /movies/<slug>
   title: string;
   originalTitle: string | null;
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); picks the download-search title
   overview: string | null;
   posterPath: string | null;
   releaseDate: string | null;
@@ -148,6 +153,7 @@ export async function getMovieDetail(userId: string, idOrSlug: string): Promise<
     slug: item.slug,
     title: item.title,
     originalTitle: item.originalTitle,
+    originalLanguage: item.originalLanguage,
     overview: item.overview,
     posterPath: item.posterPath,
     releaseDate: item.releaseDate,

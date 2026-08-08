@@ -71,7 +71,9 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
     const audioTracks = source?.audioTracks ?? [];
     const subtitleLangs = source?.subtitleLangs ?? [];
     const videoLabel = source ? [formatResolution(source.videoResolution), source.hdrFormat].filter(Boolean).join(" ") || null : null;
-    const query = s.isSpecials ? show.title : `${show.title} S${String(s.seasonNumber).padStart(2, "0")}`;
+    // Each source words its own title AND season marker (in its configured language), so only the number goes in.
+    // Specials pass none — they're side content nobody searches by season number.
+    const seasonForSearch = s.isSpecials ? undefined : s.seasonNumber;
     return {
       seasonNumber: s.seasonNumber,
       label: s.isSpecials ? "Specials" : `Season ${s.seasonNumber}`,
@@ -83,7 +85,7 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ slu
       videoLabel,
       audioWarning: originalAudioLang && audioTracks.length > 0 && !audioTracks.some((t) => t.code === show.originalLanguage || (t.code == null && t.lang === originalAudioLang)) ? `No ${originalAudioLang} audio` : null,
       subtitleWarning: subtitleLangs.length > 0 && !subtitleLangs.includes("English") ? "No English subtitles" : null,
-      downloadLinks: s.onServer ? [] : downloadLinksFor(sources, "shows", query),
+      downloadLinks: s.onServer ? [] : downloadLinksFor(sources, "shows", show, seasonForSearch),
       latestWatchedISO: s.latestWatchedAtISO,
       latestWatchedLabel: s.latestWatchedAtLabel,
       episodes: s.episodes.map((e) => ({

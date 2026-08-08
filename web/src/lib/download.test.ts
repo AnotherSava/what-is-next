@@ -90,6 +90,8 @@ describe("classifyDownloads", () => {
     showId: `id-${title}`,
     slug: `id-${title}`,
     title,
+    originalTitle: null,
+    originalLanguage: null,
     posterPath: null,
     isFavorite: false,
     tmdbRating: null,

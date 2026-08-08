@@ -28,6 +28,8 @@ export interface ShowSummary {
   id: string;
   slug: string | null; // URL slug for the detail link (falls back to id when unset)
   title: string;
+  originalTitle: string | null; // native title — the query for a download source that searches in that language
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); which language originalTitle is in
   posterPath: string | null;
   status: string | null;
   isFavorite: boolean;
@@ -107,6 +109,8 @@ export async function getFollowedShows(userId: string, today: string = todayISO(
         id: st.mediaItem.id,
         slug: st.mediaItem.slug,
         title: st.mediaItem.title,
+        originalTitle: st.mediaItem.originalTitle,
+        originalLanguage: st.mediaItem.originalLanguage,
         posterPath: st.mediaItem.posterPath,
         status: st.mediaItem.status,
         isFavorite: st.isFavorite,

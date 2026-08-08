@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getDownloads, type DownloadMovie, type DownloadShow } from "@/lib/download";
-import { downloadLinksFor, type DownloadSource } from "@/lib/downloadSources";
+import { downloadLinksFor, type DownloadSource, type SearchTitle } from "@/lib/downloadSources";
 import { formatRuntime, formatSeasonRange } from "@/lib/format";
 import { getDisplayedUser, getSessionUser, permissionsFor } from "@/lib/session";
 import { getDownloadSources } from "@/lib/settings";
@@ -33,7 +33,7 @@ export default async function DownloadPage() {
     rating: s.imdbRating,
     isFavorite: s.isFavorite,
     shelfMeta: formatSeasonRange(s.missingSeasons),
-    dlOptions: dlLinks(sources, "shows", s.title),
+    dlOptions: dlLinks(sources, "shows", s),
   });
   const movieCard = (m: DownloadMovie): DownloadMovieCard => ({
     kind: "movie",
@@ -46,7 +46,7 @@ export default async function DownloadPage() {
     year: m.releaseDate ? m.releaseDate.slice(0, 4) : "",
     director: m.director ?? "",
     runtime: formatRuntime(m.runtime),
-    dlOptions: dlLinks(sources, "movies", m.title),
+    dlOptions: dlLinks(sources, "movies", m),
   });
 
   const sections: DownloadSection[] = (
@@ -62,6 +62,6 @@ export default async function DownloadPage() {
   return <DownloadView sections={sections} showCount={showCount} movieCount={movies.length} canFavorite={canEdit} />;
 }
 
-function dlLinks(sources: DownloadSource[], kind: "shows" | "movies", title: string) {
-  return downloadLinksFor(sources, kind, title).map((l) => ({ label: l.label, href: l.href }));
+function dlLinks(sources: DownloadSource[], kind: "shows" | "movies", item: SearchTitle) {
+  return downloadLinksFor(sources, kind, item).map((l) => ({ label: l.label, href: l.href }));
 }

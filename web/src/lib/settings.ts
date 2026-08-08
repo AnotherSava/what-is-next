@@ -93,13 +93,18 @@ const waitForFullSeasonSchema = z.object({ enabled: z.boolean() });
 // Owner-configured download-source links for the Download view (torrent/tracker searches). Each source's URL —
 // domain, path, params — lives here, in runtime config, not the repo, so no download-source details are ever
 // committed. A source targets movie cards, show cards, or both; its template carries a {query} placeholder
-// replaced with the URL-encoded title. Kept permissive (any string) on purpose: the URL shape is validated where
-// it's used — see src/lib/downloadSources.ts.
+// replaced with the URL-encoded title, in the source's own search language. Kept permissive (any string) on
+// purpose: the URL shape and the language code are validated where they're used — see src/lib/downloadSources.ts.
 const downloadSourceSchema = z.object({
   label: z.string(),
   template: z.string(),
   movies: z.boolean(),
   shows: z.boolean(),
+  // ISO 639-1 code of the title the source is searched with; default "en" keeps pre-feature stored rows parseable.
+  language: z.string().default("en"),
+  // Season marker for a per-season show link, printf-shaped (see downloadSources.ts). The default keeps pre-feature
+  // stored rows producing the same "… S02" links they always did.
+  seasonPattern: z.string().default("S%02d"),
 });
 const downloadSourcesSchema = z.object({ sources: z.array(downloadSourceSchema) });
 

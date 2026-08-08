@@ -22,6 +22,7 @@ import {
   isWaitForFullSeasonEnabled,
   SYNC_KEYS,
 } from "@/lib/settings";
+import { getCatalogLanguageCodes, searchLanguageOptions } from "@/lib/searchLanguages";
 import { isTvdbConfigured } from "@/lib/tvdb";
 import { addSelectedLibraryItems, setManualWatched, setWaitForFullSeason } from "./actions";
 import { BackupNowButton, RefreshNowButton, SettingToggle } from "./_components/AdminButtons";
@@ -63,6 +64,9 @@ const JOB_GRID_COLS: Record<number, string> = {
 
 const CARD_CLASS = "rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]";
 const DESC_CLASS = "text-[13px] leading-[1.5] text-[var(--color-muted)]";
+// The control name in a "what each field does" description list — brighter than the description beside it, so the
+// terms read as a column you can scan.
+const FIELD_TERM_CLASS = "font-medium whitespace-nowrap text-[var(--color-bright)]";
 
 function absolute(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
@@ -152,22 +156,31 @@ export default async function AdminPage() {
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const servers = await getMediaServers();
-  const [refresh, backup, tvdbStubs, manualWatched, waitForFullSeason, downloadSources, ...serverRuns] =
-    await Promise.all([
-      getSetting("refresh:lastRun"),
-      getSetting("backup:lastRun"),
-      getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
-      isManualWatchedEnabled(),
-      isWaitForFullSeasonEnabled(),
-      getDownloadSources(),
-      // One bookkeeping bundle per provider, loaded whether or not it's connected — a card renders for each.
-      ...MEDIA_PROVIDERS.map(async (provider) => ({
-        provider,
-        lastSync: await getSetting(SYNC_KEYS[provider].lastSync),
-        candidates: await getSetting(SYNC_KEYS[provider].candidates),
-        unaccounted: await getSetting(SYNC_KEYS[provider].unaccounted),
-      })),
-    ]);
+  const [
+    refresh,
+    backup,
+    tvdbStubs,
+    manualWatched,
+    waitForFullSeason,
+    downloadSources,
+    catalogLanguages,
+    ...serverRuns
+  ] = await Promise.all([
+    getSetting("refresh:lastRun"),
+    getSetting("backup:lastRun"),
+    getPrisma().mediaItem.count({ where: { tmdbId: null, tvdbId: { not: null }, needsDetails: true } }),
+    isManualWatchedEnabled(),
+    isWaitForFullSeasonEnabled(),
+    getDownloadSources(),
+    getCatalogLanguageCodes(),
+    // One bookkeeping bundle per provider, loaded whether or not it's connected — a card renders for each.
+    ...MEDIA_PROVIDERS.map(async (provider) => ({
+      provider,
+      lastSync: await getSetting(SYNC_KEYS[provider].lastSync),
+      candidates: await getSetting(SYNC_KEYS[provider].candidates),
+      unaccounted: await getSetting(SYNC_KEYS[provider].unaccounted),
+    })),
+  ]);
   const stale = (iso: string): boolean => nowMs - new Date(iso).getTime() > FRESH_WINDOW_MS;
 
   // ── Refresh (incl. TVDB-fallback completeness) ────────────────────────────
@@ -444,13 +457,52 @@ export default async function AdminPage() {
 
         <div className="mt-4 border-t border-[#22222a] pt-4">
           <h3 className="font-display text-[13px] font-semibold">Download search links</h3>
-          <p className={`mt-1 ${DESC_CLASS}`}>
-            Links shown on each movie and show in the Download view (open in a new tab). Put{" "}
-            <span className="font-mono text-xs">{"{query}"}</span> where the title goes, and choose which cards each
-            source appears on; leave the label blank to use the site&rsquo;s domain. Stored here, never in the repo.
-          </p>
+          {/* Field reference — read once, then in the way. Collapsed by default so the sources themselves are what
+              this section shows; <details> keeps it free of client JS in this server component. The section's
+              one-line description IS the summary, with the toggle ending that same line. Clicking anywhere in a
+              <summary> normally toggles it, which would make a plain sentence a surprise click target — so the
+              summary drops pointer events and only the pill takes them back. Keyboard activation is unaffected:
+              the summary still takes focus and Enter/Space still opens it. */}
+          <details className={`mt-1 ${DESC_CLASS}`}>
+            <summary className={`${SUMMARY_RESET} flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pointer-events-none`}>
+              <span>One link per source on every movie and show in the Download view, opening in a new tab.</span>
+              <span className="wn-helptoggle pointer-events-auto">
+                What each field does
+                <DisclosureChevron />
+              </span>
+            </summary>
+            {/* One row per control, in the order they appear on a source's row. */}
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1">
+              <dt className={FIELD_TERM_CLASS}>Label</dt>
+              <dd>Text on the chip. Blank uses the site&rsquo;s domain.</dd>
+
+              <dt className={FIELD_TERM_CLASS}>Language</dt>
+              <dd>
+                A title made in this language is searched under its own name, everything else under its English one.
+              </dd>
+
+              <dt className={FIELD_TERM_CLASS}>Movies / Shows</dt>
+              <dd>Which cards the source appears on.</dd>
+
+              <dt className={FIELD_TERM_CLASS}>Season format</dt>
+              <dd>
+                Appended to a show&rsquo;s per-season link, with <Mono>%d</Mono> for the season number and{" "}
+                <Mono>%02d</Mono> padded to two digits &mdash; <Mono>S%02d</Mono> gives S05, <Mono>Сезон %d</Mono> gives
+                Сезон 5.
+              </dd>
+
+              <dt className={FIELD_TERM_CLASS}>URL</dt>
+              <dd>
+                Put <Mono>{"{query}"}</Mono> where the title goes.
+              </dd>
+            </dl>
+            <p className="mt-2 text-[var(--color-faint)]">Every source is stored here, never in the repo.</p>
+          </details>
           <div className="mt-3">
-            <DownloadSourcesEditor sources={downloadSources} />
+            <DownloadSourcesEditor
+              sources={downloadSources}
+              languages={searchLanguageOptions(catalogLanguages, downloadSources)}
+            />
           </div>
         </div>
       </section>
@@ -461,6 +513,43 @@ export default async function AdminPage() {
 // The inspectable breakdown behind the Refresh card's "N errors" badge. Distinct error messages surface right
 // away; the titles hit by each fold into an expansion box. Populated on the next run; older summaries (count
 // only) render nothing here.
+// A literal you'd type into a settings field — a URL placeholder, a season format. Monospaced so the exact
+// characters (and where the padding digits go) are unambiguous against the prose around it.
+function Mono({ children }: { children: React.ReactNode }) {
+  return <span className="font-mono text-xs">{children}</span>;
+}
+
+// Native-marker suppression for a <summary> — layout and colour are the caller's. `list-none` is what hides
+// Firefox's own triangle (the ::-webkit- rule only covers Chromium), so DisclosureChevron is the only disclosure
+// indicator on either engine.
+const SUMMARY_RESET = "list-none [&::-webkit-details-marker]:hidden";
+
+// The open/closed indicator for a <details>: a chevron pointing right when collapsed, down when open. Both are
+// rendered and display-swapped by the [open] rules in globals.css — a CSS transform on inline SVG proved
+// unreliable here. Shared so every disclosure in Settings reads identically.
+function DisclosureChevron() {
+  const shared = {
+    width: 11,
+    height: 11,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.4,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  } as const;
+  return (
+    <span className="flex shrink-0 text-[var(--color-faint)]" aria-hidden>
+      <svg className="wn-disc-collapsed" {...shared}>
+        <polyline points="9 18 15 12 9 6" />
+      </svg>
+      <svg className="wn-disc-expanded hidden" {...shared}>
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </span>
+  );
+}
+
 function RefreshErrors({ errors, items }: { errors: number; items: RefreshError[] }) {
   // Group failures by reason, preserving first-seen order.
   const groups = new Map<string, RefreshError[]>();
@@ -473,36 +562,10 @@ function RefreshErrors({ errors, items }: { errors: number; items: RefreshError[
     <div className="mt-2.5 space-y-1.5 text-[12px]">
       {[...groups.entries()].map(([reason, group]) => (
         <details key={reason}>
-          <summary className="flex cursor-pointer select-none items-center gap-1 text-[var(--color-behind)] [&::-webkit-details-marker]:hidden">
-            <span className="flex shrink-0 text-[var(--color-faint)]" aria-hidden>
-              {/* Collapsed: chevron points right; expanded: chevron points down. Swapped by the [open] rule above. */}
-              <svg
-                className="wn-disc-collapsed"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <svg
-                className="wn-disc-expanded hidden"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </span>
+          <summary
+            className={`${SUMMARY_RESET} flex w-fit cursor-pointer select-none items-center gap-1 text-[var(--color-behind)]`}
+          >
+            <DisclosureChevron />
             <span className="truncate">
               {reason} <span className="text-[var(--color-faint)]">· {group.length}</span>
             </span>

@@ -17,6 +17,8 @@ export interface DownloadShow {
   showId: string;
   slug: string | null; // URL slug for the detail link (falls back to showId when unset)
   title: string;
+  originalTitle: string | null; // native title — used by download sources that search in the show's own language
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); which language originalTitle is in
   posterPath: string | null;
   isFavorite: boolean;
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
@@ -33,6 +35,8 @@ export interface DownloadMovie {
   movieId: string;
   slug: string | null; // URL slug for the detail link (falls back to movieId when unset)
   title: string;
+  originalTitle: string | null; // native title — used by download sources that search in the movie's own language
+  originalLanguage: string | null; // TMDB original_language code (mostly ISO 639-1); which language originalTitle is in
   posterPath: string | null;
   releaseDate: string | null; // ISO date; only its year is rendered
   tmdbRating: number | null; // TMDB community score (0–10) — rendered on the card
@@ -127,6 +131,8 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
       movieId: m.id,
       slug: m.slug,
       title: m.title,
+      originalTitle: m.originalTitle,
+      originalLanguage: m.originalLanguage,
       posterPath: m.posterPath,
       releaseDate: m.releaseDate,
       tmdbRating: m.tmdbRating,
@@ -201,6 +207,8 @@ export async function getDownloads(userId: string, today: string = todayISO()): 
       showId: s.id,
       slug: s.slug,
       title: s.title,
+      originalTitle: s.originalTitle,
+      originalLanguage: s.originalLanguage,
       posterPath: s.posterPath,
       isFavorite: s.isFavorite,
       tmdbRating: s.tmdbRating,

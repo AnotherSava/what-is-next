@@ -45,7 +45,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ sl
     ? `WATCHED${movie.watchedAt ? ` · ${displayMonthYear(movie.watchedAt).toUpperCase()}` : ""}`
     : null;
   const watchedTitle = movie.watched && movie.watchedAt ? displayDate(movie.watchedAt) : null;
-  const downloadLinks = downloadLinksFor(sources, "movies", movie.title);
+  const downloadLinks = downloadLinksFor(sources, "movies", movie);
 
   // Source spec rows (only for a movie you have): resolution + HDR, audio-track languages, subtitle languages.
   const video = [formatResolution(movie.videoResolution), movie.hdrFormat].filter(Boolean).join(" ");
